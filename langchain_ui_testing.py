@@ -4,12 +4,16 @@ from io import BytesIO
 from PIL import Image
 from langchain_core.messages import HumanMessage
 from langchain_ollama import ChatOllama
+from langchain_mistralai import ChatMistralAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 import getpass
 import os
 
-system_prompt = """
+from dotenv import load_dotenv
+load_dotenv()
+
+calendar_prompt = """
 Please analyze the labeled calendar image provided. The image contains UI elements with numeric labels and their corresponding text. Your task is to extract specific information about the calendar's current state.
 
 Please provide the following details in JSON format:
@@ -35,12 +39,34 @@ The text within the UI elements may be in any language. Transcribe the text exac
 The label IDs correspond to the numeric IDs in the image labels (e.g., "0", "1", etc.).
 Include only the specified fields in the JSON output.
 """
+combobox_prompt = """ 
+You are given a webpage screenshot from Türkiye İş Bankasi’s “Hizli Kredi - Hesapla” page. Examine the screenshot closely and identify the visible icons and comboboxes related to selecting a loan type.
 
+Your final answer must be a single JSON object with two top-level keys: "icon" and "combobox". Each key maps to an array. If you have no relevant icons or comboboxes, return empty arrays for them. Otherwise, list the ones that help accomplish the “select loan type” task.
+
+For each icon you include, create an object with exactly two fields:
+- "id": A numeric label identifying that icon as it appears in the screenshot. Use the actual numeric label from the screenshot.
+- "label": The textual label visible for that icon exactly as shown in the screenshot. Do not invent, alter, or translate text. Reproduce it character-for-character, including spaces, punctuation, and any diacritical marks. If the icon’s label in the screenshot is, for example, “Türkiye İş Bankası Logo,” then use exactly “Türkiye İş Bankası Logo.”
+
+For each combobox you include, create an object with exactly these fields:
+- "id": The numeric label that identifies the combobox in the screenshot.
+- "label": The visible textual label of the combobox exactly as shown in the screenshot. No changes, no additions.
+- "selectedOption": The text of the currently selected option exactly as it appears in the screenshot. Again, no alterations or guesses.
+- "state": Either "open" or "closed". Determine this by what you see in the screenshot. If the combobox is not visibly showing multiple options, set this to "closed".
+- If "state" is "open", include a "visibleOptions" array listing all visible options. Each option must be exactly as seen on the screen. If "state" is "closed", do not include "visibleOptions" at all.
+
+Do not include any additional fields, keys, or properties beyond those specified above. Do not provide any explanations, reasoning steps, or commentary in your final answer. Do not include numeric references for anything other than the "id" fields. Textual labels, selected options, and visible options must appear exactly as they do in the screenshot, without modifications.
+
+Since the given task is “select loan type,” return only the icons and comboboxes that are necessary to perform this action. If, for example, there is a combobox labeled “Kredi Türü” that allows you to select a loan type, include it and its currently selected option exactly as shown. If there are other comboboxes or icons unrelated to choosing the loan type, do not include them.
+
+Your final output must be the JSON object only, with no extra text, explanations, or commentary before or after it.
+"""
 # List of available models
 available_models = [
     "llama3.2-vision:11b-instruct-q4_K_M",
     "llama3.2-vision:11b",
-    "llava:latest"
+    "llava:latest",
+    "janus-pro-7b"
 ]
 
 # Default selected model
@@ -51,7 +77,8 @@ default_model = "llama3.2-vision:11b-instruct-q4_K_M"
 model_initializers = {
     "llama3.2-vision:11b-instruct-q4_K_M": lambda: ChatOllama(model="llama3.2-vision:11b-instruct-q4_K_M", temperature=0),
     "llama3.2-vision:11b": lambda: ChatOllama(model="llama3.2-vision:11b", temperature=0),
-    "llava:latest": lambda: ChatOllama(model="llava:latest", temperature=0)
+    "llava:latest": lambda: ChatOllama(model="llava:latest", temperature=0),
+    "janus-pro-7b": lambda: ChatOllama(model="erwan2/DeepSeek-Janus-Pro-7B", temperature=0)
 }
 
 
@@ -70,7 +97,7 @@ def convert_to_base64(pil_image):
     return img_str
 
 # Function to query the LLM
-def query_llm(image_base64, model_name):
+def query_llm(image_base64, model_name, system_prompt):
     llm = model_initializers[model_name]()
 
     def prompt_func(data):
@@ -96,22 +123,30 @@ def query_llm(image_base64, model_name):
     query_chain = chain.invoke(
         {"text": system_prompt, "image": image_base64}
     )
-
     return query_chain
 
 # Function to handle the image input and return the LLM response
-def process_image(image, model_name):
+def process_image(image, model_name, task_type):
     image_base64 = convert_to_base64(image)
-    description = query_llm(image_base64, model_name)
+    # Select which prompt to use based on the task_type
+    if task_type == "Calendar":
+        chosen_prompt = calendar_prompt
+    else:
+        chosen_prompt = combobox_prompt
+    description = query_llm(image_base64, model_name, chosen_prompt)
     return description
 
 # Create the Gradio interface
 iface = gr.Interface(
     fn=process_image,
-    inputs=[gr.Image(type="pil"), gr.Radio(choices=available_models, label="Select Model", value=default_model)],
+    inputs=[
+    gr.Image(type="pil"),
+    gr.Radio(choices=available_models, label="Select Model", value=default_model),
+    gr.Radio(choices=["Calendar", "Combobox"], label="Task Type", value="Calendar")
+    ],
     outputs="text",
-    title="Calendar  using LLM",
-    description="Upload an image to get a description from the LLM."
+    title="UI Analysis with LLM",
+    description="Upload an image and select a task type to extract UI information (Calendar or Combobox)."
 )
 
 # Launch the interface
