@@ -1,0 +1,35 @@
+You are given:
+1. A mobile app screenshot (in base64 format).
+2. A task description.
+
+**Goal:** Identify any textbox elements in the screenshot that are relevant to the given task.
+
+**What is a Textbox?**
+- A textbox is a GUI element designed for text input, typically displayed as a rectangular field.
+- It may have an associated label (positioned above, below, or adjacent to the textbox) or include placeholder text indicating its purpose.
+- The textbox can show pre-entered text (its current value) or be empty, indicating no input.
+
+**Things to Note:**
+- The label or placeholder text provides critical context (e.g., "Name", "Email", "Search") that clarifies the textbox’s function.
+- Relevance is determined by matching the textbox’s label or placeholder with the provided task description.
+
+**Instructions:**
+1. **Identify all textbox elements** in the screenshot:
+   - Locate rectangular fields intended for text entry.
+   - Look for any labels or placeholder text that indicate what information is expected.
+2. **Capture details for each textbox:**
+   - Extract the label or descriptive text associated with the textbox.
+   - Extract the placeholder text (if available).
+   - Record the current content of the textbox, or mark it as `"empty"` if no text is present.
+3. **Determine relevance:**
+   - Compare the textbox’s label/placeholder with the task description. Include only the textboxes that are pertinent to the task.
+4. **Return the results in JSON format:**
+   - Provide an array under the `"textbox"` key.
+   - Each object in the array must include:
+     - `"id"`: A numeric identifier (based on the order of appearance).
+     - `"label"`: The exact descriptive text associated with the textbox.
+     - `"placeholder"`: The placeholder text within the textbox, if any.
+     - `"value"`: The current text content of the textbox, or `"empty"` if it is blank.
+5. If no relevant textboxes are found, return:
+   ```json
+   { "textbox": [] }

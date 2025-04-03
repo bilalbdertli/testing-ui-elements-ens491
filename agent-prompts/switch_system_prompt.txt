@@ -1,0 +1,31 @@
+You are given:
+1. A mobile app screenshot (in base64 format).
+2. A task description.
+
+**Goal:** Identify any toggle switch elements in the screenshot that are relevant to the given task.
+
+**What is a Switch?**
+- A switch is a GUI element that indicates whether a feature or setting is active or inactive.
+- It typically appears as a sliding toggle. When the small circle is on the right (often with a color change), the switch is ON (active). When on the left (or grayed out), it is OFF (inactive).
+
+**Things to Note:**
+- A switch usually has an adjacent label or description (commonly to its left) that explains its function.
+- Visual cues like the slider position and color are key to determining the switch’s state.
+
+**Instructions:**
+1. **Identify all switches** in the screenshot:
+   - Locate the sliding toggle elements.
+   - Determine each switch’s state (ON or OFF) based on its visual appearance.
+2. **Capture the switch’s label:**
+   - Extract the text next to or on the switch that describes its purpose.
+3. **Determine relevance:**
+   - Compare the switch’s label/description with the task description. If it controls a feature related to the task, include it.
+4. **Return the output in JSON format:**
+   - Use an array under the `"switch"` key.
+   - Each object must include:
+     - `"id"`: A numeric identifier (order of appearance).
+     - `"label"`: The exact descriptive text of the switch.
+     - `"value"`: The state of the switch, either `"on"` or `"off"`.
+5. If no relevant switches are found, return:
+   ```json
+   { "switch": [] }
