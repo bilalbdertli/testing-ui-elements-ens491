@@ -118,46 +118,95 @@ def extract_json(text):
 
 # Router agent function
 def router_agent(state: GraphState) -> GraphState:
-    # Initialize the model for JSON response
+    print("--- Entering Router Agent ---")
+    max_retries = 3
+    attempts = 0
+    messages = list(state["messages"]) # Start with existing messages, if any
+
     model = initialize_model(use_90b=state["use_90b"], json_response=True)
     
-    # Create the messages for the model
-    human_message = HumanMessage(
-        content=[
+    # Prepare initial messages if history is empty
+    if not messages:
+        print("Initializing message history.")
+        human_content = [
+            {"type": "text", "text": "Analyze the following UI screenshot."},
             {
                 "type": "image_url",
                 "image_url": {"url": f"data:{state['image_mime_type']};base64,{state['image_base64']}"},
             }
-        ],
-    )
-    system_message = SystemMessage(content=SYSTEM_PROMPTS["Router"])
+        ]
+        initial_human_message = HumanMessage(content=human_content)
+        system_message = SystemMessage(content=SYSTEM_PROMPTS["Router"]) # Ensure this prompt asks for JSON matching RouterInitialDecision
+        messages.extend([system_message, initial_human_message])
     
-    print("We are about to call LLM via API")
-    # Get the response from the model
-    response = model.invoke([system_message, human_message])
-    
-    print("Here is the Router agent response:\n")
-    
-    response.content = "some dummy text is here."
-    print(response.content)
 
-    try:
-        # Try to extract JSON from the response
-        response_json = extract_json(response.content)
-        print("Here is the extracted json\n")
-        print(response_json)
-        # Ensure screenshot_types is a list
-        if isinstance(response_json.get("analysis_needed"), str):
-            response_json["analysis_needed"] = [response_json["analysis_needed"]]
-        
-        # Initialize element_analyses list and processed_types list
-        decision = RouterInitialDecision.model_validate(response_json)
-        print("Casting is successful!")
-    except Exception as e:
-        # Handle any errors in parsing
-         print(e)
-    
-    return state
+    while attempts < max_retries:
+        attempts += 1
+        print(f"\nAttempt {attempts}/{max_retries}...")
+
+        print("Calling LLM via API...")
+        try:
+            response = model.invoke(messages)
+            print("LLM Response Received.")
+            # Add AI response to history *immediately* for context in potential retries
+            messages.append(AIMessage(content=response.content)) # Add the actual AIMessage object
+
+            print("Raw LLM Response Content:")
+            print(response.content)
+
+            # --- Try parsing and validation ---
+            print("Attempting to extract and validate JSON...")
+            response_json = extract_json(response.content)
+            print("JSON extracted successfully:")
+            print(response_json)
+
+            # Ensure analysis_needed is a list (handle LLM variability)
+            if "analysis_required" in response_json and isinstance(response_json["analysis_required"], str):
+                 print("Adjusting analysis_needed from string to list.")
+                 response_json["analysis_required"] = [response_json["analysis_required"]]
+
+
+            # Validate against the Pydantic model
+            decision = RouterInitialDecision.model_validate(response_json)
+            print("Pydantic validation successful!")
+
+            # --- Success Case ---
+            # Return the updates to the state
+            return {
+                "device": decision.device,
+                "analysis_required": decision.analysis_required,
+                "messages": messages # Return the final message history
+            }
+
+        except (ValueError, json.JSONDecodeError, Exception) as e: # Catch JSON errors and Pydantic validation errors
+            print(f"Error during attempt {attempts}: {e}")
+            if attempts >= max_retries:
+                print("Maximum retries reached. Failing.")
+                # Optionally raise the error or return a specific failure state
+                return {"error": "Router failed after max retries",
+                        "messages": messages
+                }
+
+            # --- Prepare Error Feedback for Retry ---
+            print("Preparing error feedback for LLM retry...")
+            error_feedback = (
+                f"Your previous response could not be processed. "
+                f"Error: {e}. "
+                f"Please carefully review the initial request and the required JSON format "
+                f"(device: 'ios'|'android', analysis_needed: list[str]) "
+                f"and provide a valid JSON response. Ensure the entire response is only the JSON object."
+                # Optional: Include Pydantic schema for more detail
+                # f"Expected schema: {RouterInitialDecision.model_json_schema()}"
+            )
+            # Add the error feedback as a new HumanMessage for the next attempt
+            messages.append(HumanMessage(content=error_feedback))
+            print("Error feedback added to messages for next attempt.")
+
+        # Loop continues for the next attempt
+
+    # Should not be reached if max_retries > 0, but as a fallback
+    print("Exiting router agent loop unexpectedly.")
+    return {"messages": messages} # Return current messages if loop finishes weirdly
 
 # Specialized agent function
 def specialized_agent(state: GraphState) -> GraphState:
