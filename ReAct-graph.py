@@ -21,11 +21,11 @@ from langchain_core.prompts import ChatPromptTemplate
 load_dotenv()
 
 # Get Azure OpenAI API credentials from environment variables
-llm_model_name = os.getenv("LLM_MODEL_NAME")
-llm_api_key = os.getenv("AZURE_LLAMA_90B_VISION_API_KEY")
+llm_model_name = os.getenv("VLM_MODEL_NAME")
+llm_api_key = os.getenv("AZURE_LLAMA_4_MAVERICK_17B_API_KEY")
 llm_11b_api_key = os.getenv("AZURE_LLAMA_11B_VISION_API_KEY")
-llm_endpoint = os.getenv("LLM_END_POINT")
-llm_api_version = os.getenv("LLM_API_VERSION")
+llm_endpoint = os.getenv("VLM_END_POINT")
+llm_api_version = os.getenv("LM_API_VERSION")
 
 # Loading prompts from their corresponding txt files and setting them to a dictionary.
 def load_prompt_from_file(filepath):
@@ -129,7 +129,7 @@ def router_agent(state: GraphState) -> GraphState:
     if not messages:
         print("Initializing message history.")
         human_content = [
-            {"type": "text", "text": "Analyze the following UI screenshot."},
+            {"type": "text", "text": state['human_request']},
             {
                 "type": "image_url",
                 "image_url": {"url": f"data:{state['image_mime_type']};base64,{state['image_base64']}"},
@@ -299,7 +299,7 @@ def router_decider(state: GraphState) -> str:
         return "specialized_agent"
 
 # Function to process the image through our agent graph
-def process_image_with_graph(image, model_choice):
+def process_image_with_graph(image, model_choice, human_request):
     try:
         # Determine which model to use
         use_90b = model_choice == "90B Model"
@@ -318,6 +318,7 @@ def process_image_with_graph(image, model_choice):
             "image_base64": image_base64,
             "image_mime_type": mime_type,
             "use_90b": use_90b,
+            "human_request": human_request,
             "device": None,
             "analysis_needed" : [],
             "button_analysis" : ButtonList(),
@@ -361,6 +362,10 @@ with gr.Blocks(title="UI Analysis with LangGraph") as demo:
     with gr.Row():
         with gr.Column(scale=1):
             image_input = gr.Image(type="pil", label="Upload UI Screenshot")
+            human_request = gr.Textbox(
+                label="Enter your request",
+                placeholder="e.g., Find all the buttons in the image.",
+            )
             model_choice = gr.Radio(
                 ["90B Model", "11B Model"], 
                 label="Select Model", 
@@ -375,7 +380,7 @@ with gr.Blocks(title="UI Analysis with LangGraph") as demo:
     
     submit_button.click(
         fn=process_image_with_graph,
-        inputs=[image_input, model_choice],
+        inputs=[image_input, model_choice, human_request],
         outputs=[image_type_output,] # analysis_output, debug_output
     )
     

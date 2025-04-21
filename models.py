@@ -129,8 +129,9 @@ class GraphState(TypedDict):
     image_base64: str # Base64 encoded representation of input UI screenshot.
     image_mime_type: str # The MIME type of the input image
     use_90b: bool # Config flag
+    human_request: str # String that will be written.
     device: Optional[Literal["ios", "android"]]
-    analysis_needed: List[str]
+    analysis_required: List[str]
     button_analysis: ButtonList
     checkbox_analysis: CheckboxList
     messages: List[BaseMessage]
