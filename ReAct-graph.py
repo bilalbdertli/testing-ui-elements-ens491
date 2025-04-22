@@ -10,11 +10,12 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from enum import Enum
-from typing import Literal, Dict, List, Any, TypedDict, Annotated, Union
+from typing import Literal, Dict, List, Any, TypedDict, Annotated, Union, Type
 import operator
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langgraph.graph import StateGraph, END
-from models import GraphState, RouterInitialDecision, ButtonList, CheckboxList
+from models import GraphState, RouterInitialDecision, ButtonList, CheckboxList, ComboboxList, IconList, SwitchList, TextboxList, URLList, CalendarList
+ 
 from langchain_core.prompts import ChatPromptTemplate
 
 # Load environment variables from .env file
@@ -117,7 +118,7 @@ def extract_json(text):
     raise ValueError(f"Could not extract valid JSON from: {text}")
 
 # Router agent function
-def router_agent(state: GraphState) -> GraphState:
+def router_agent(state: GraphState) ->  Dict[str, Any]:
     print("--- Entering Router Agent ---")
     max_retries = 3
     attempts = 0
@@ -208,95 +209,164 @@ def router_agent(state: GraphState) -> GraphState:
     print("Exiting router agent loop unexpectedly.")
     return {"messages": messages} # Return current messages if loop finishes weirdly
 
+def button_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here
+    # ...
+    agent_name = "Button"
+    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], ButtonList, state["analysis_required"])
+
+def checkbox_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here
+     # ...
+    agent_name = "Checkbox"
+    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], CheckboxList, state["analysis_required"])
+
+
+def calendar_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here
+    # ...
+    agent_name = "Calendar"
+    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], CalendarList, state["analysis_required"])
+
+
+def textbox_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here
+    # ...
+    agent_name = "Textbox"
+    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], TextboxList, state["analysis_required"])
+
+
+def url_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here
+    # ...
+    agent_name = "Url"
+    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], URLList, state["analysis_required"])
+
+
+def icon_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here
+    # ...
+    agent_name = "Icon"
+    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], IconList, state["analysis_required"])
+
+def combobox_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here
+    # ...
+    agent_name = "Combobox"
+    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], ComboboxList, state["analysis_required"])
+
+def switch_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here
+    # ...
+    agent_name = "Switch"
+    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], SwitchList, state["analysis_required"])
+    
+
+def call_special_agent_and_parse(agent_name: str, system_prompt:SystemMessage, human_request: HumanMessage, return_type:Type[BaseModel], current_list):
+    result = specialized_agent(agent_name,  system_prompt, human_request, return_type)
+
+        # 3. Process the result and prepare state updates
+    update_dict = {}
+    if "error" in result:
+        print(f"Specialized agent for {agent_name} reported an error: {result['error']}")
+        update_dict[f"{agent_name.lower()}_analysis"] = SwitchList() # Store empty SwitchList
+        # update_dict["messages"] = state["messages"] + [AIMessage(content=f"Error during {agent_name} analysis.")]
+    else:
+        update_dict[f"{agent_name.lower()}_analysis"] = result["decision"]
+        # update_dict["messages"] = state["messages"] + [AIMessage(content=f"{agent_name} analysis complete.")]
+
+
+    # 4. ALWAYS update analysis_needed list
+    # Use lower() for case-insensitive comparison if needed
+    updated_needed = [item for item in current_list if item.lower() != agent_name.lower()]
+    print(f"Updating analysis_needed from {current_list} to {updated_needed}")
+    update_dict["analysis_required"] = updated_needed
+
+    # 5. Return the dictionary containing updates for GraphState
+    return update_dict
+
 # Specialized agent function
-def specialized_agent(state: GraphState) -> GraphState:
-    # Get the list of screenshot types from classification
-    screenshot_types = state["classification"]["screenshot_types"]
-    
-    # Check if we've processed all types
-    if state["current_type_index"] >= len(screenshot_types):
-        # We've processed all types, so combine the results
-        combined_response = {
-            "platform": state["classification"]["platform"],
-            "elements": state["element_analyses"]
-        }
-        state["final_response"] = combined_response
-        return state
-    
-    # Get the current type to process
-    current_type = screenshot_types[state["current_type_index"]]
-    
-    # Get the appropriate system prompt
-    system_prompt = SYSTEM_PROMPTS.get(current_type, "")
-    
-    if not system_prompt:
-        # Skip unsupported types
-        state["current_type_index"] += 1
-        state["processed_types"].append(current_type)
-        return state
+def specialized_agent(agent_name: str, agent_system_prompt: SystemMessage, human_prompt: HumanMessage, validation_model:Type[BaseModel]) -> Dict[str, Any]:
+    print(f"--- Entering {agent_name} Agent ---")
+    max_retries = 3
+    attempts = 0
+    messages = [agent_system_prompt, human_prompt]
     
     # Initialize the model with JSON response format
-    model = initialize_model(use_90b=state["use_90b"], json_response=True)
+    model = initialize_model(use_90b=True, json_response=True)
     
-    # Create the messages for the model
-    # For Calendar type, we need to add a task parameter
-    if current_type == "Calendar":
-        # A placeholder task description for calendar analysis
-        task_description = "Analyze the calendar and identify its current state and selected date."
-        system_prompt = system_prompt.format(task=task_description, image_base64=state["image_base64"])
-    
-    human_message = HumanMessage(
-        content=[
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:{state['image_mime_type']};base64,{state['image_base64']}"},
-            }
-        ],
-    )
-    system_message = SystemMessage(content=system_prompt)
-    
-    # Get the response from the model
-    response = model.invoke([system_message, human_message])
-    
-    # Save the raw response
-    state["raw_specialized_responses"].append(response.content)
-    
-    try:
-        # Try to extract JSON from the response
-        element_analysis = extract_json(response.content)
-        
-        # Ensure the type field is present
-        if "type" not in element_analysis:
-            element_analysis["type"] = current_type
-        
-        # Add the analysis to our list
-        state["element_analyses"].append(element_analysis)
-        
-    except Exception as e:
-        # Handle any errors in parsing
-        element_analysis = {
-            "type": current_type,
-            "error": str(e),
-            "raw_response": response.content
-        }
-        state["element_analyses"].append(element_analysis)
-    
-    # Mark this type as processed
-    state["processed_types"].append(current_type)
-    state["current_type_index"] += 1
-    
-    return state
+    while attempts < max_retries:
+        attempts += 1
+        print(f"\nAttempt {attempts}/{max_retries}...")
 
-# Define the router function to decide next node
-def router_decider(state: GraphState) -> str:
-    # Get the list of screenshot types from classification
-    screenshot_types = state["classification"]["screenshot_types"]
-    
-    # Check if we've processed all types
-    if state["current_type_index"] >= len(screenshot_types):
-        return "end"
-    else:
-        return "specialized_agent"
+        print(f"Calling {agent_name} LLM via API...")
+        try:
+            response = model.invoke(messages)
+            # Add AI response to history *immediately* for context in potential retries
+            messages.append(AIMessage(content=response.content)) # Add the actual AIMessage object
+
+            print(f"Raw {agent_name} LLM Response Content:")
+            print(response.content)
+
+            # --- Try parsing and validation ---
+            print("Attempting to extract and validate JSON...")
+            response_json = extract_json(response.content)
+            print("JSON extracted successfully:")
+            print(response_json)
+
+
+            # Validate against the Pydantic model
+            decision = validation_model.model_validate(response_json)
+            print("Pydantic validation successful!")
+
+            # --- Success Case ---
+            # Return the updates to the state
+            return {
+                "decision": decision,
+                "messages": messages # Return the final message history
+            }
+
+        except (ValueError, json.JSONDecodeError, Exception) as e: # Catch JSON errors and Pydantic validation errors
+            print(f"Error during {agent_name} attempt {attempts}: {e}")
+            if attempts >= max_retries:
+                print(f"{agent_name} maximum retries reached. Failing.")
+                # Optionally raise the error or return a specific failure state
+                return {
+                    "error": f"{agent_name} agent failed after max retries: {e}",
+                    "messages": messages
+                }
+
+            # --- Prepare Error Feedback for Retry ---
+            print(f"Preparing error feedback for {agent_name} LLM retry...")
+            error_feedback = (
+                f"Your previous response could not be processed. "
+                f"Error: {e}. "
+                f"Please carefully review the initial request and the required JSON format "
+                f"and provide a valid JSON response. Ensure the entire response is only the JSON object."
+                # Optional: Include Pydantic schema for more detail
+                # f"Expected schema: {RouterInitialDecision.model_json_schema()}"
+            )
+            # Add the error feedback as a new HumanMessage for the next attempt
+            messages.append(HumanMessage(content=error_feedback))
+            print("Error feedback added to messages for next attempt.")
+
+        # Loop continues for the next attempt
+
+    # Should not be reached if max_retries > 0, but as a fallback
+    print("Exiting router agent loop unexpectedly.")
+    return {"error": f"{agent_name} agent finished unexpectedly.", "messages": messages} # Return current messages if loop finishes weirdly
+
+
+def decide_next_step(state: GraphState) -> str:
+    """
+    Determines the next specialist agent to call based on analysis_needed,
+    or signals completion if the list is empty.
+    """
+    print("--- Deciding Next Step ---")
+    needed = state["analysis_required"]
+    print(f"Analysis needed: {needed}")
+
+    if not needed:
+        print("Decision: All analyses complete. Routing to END.")
+        return "__end__" # Special key indicating completion
+
+    # Select the next agent type from the list
+    next_agent_type = needed[0]
+    print(f"Decision: Routing to '{next_agent_type}' agent.")
+    return next_agent_type # e.g., "button", "checkbox"
+
 
 # Function to process the image through our agent graph
 def process_image_with_graph(image, model_choice, human_request):
@@ -335,7 +405,7 @@ def process_image_with_graph(image, model_choice, human_request):
         
         return (
             json.dumps(final_state["device"], indent=2),
-            json.dumps(final_state["analysis_needed"], indent=2),
+            json.dumps(final_state["analysis_required"], indent=2),
         )
     
     except Exception as e:
@@ -347,9 +417,45 @@ def build_graph():
     builder = StateGraph(GraphState)
     # Add nodes
     builder.add_node("router_agent", router_agent)
-    # Set the entry point
     builder.set_entry_point("router_agent")
-    builder.set_finish_point("router_agent")
+    builder.add_node("decider", lambda state: None)
+    builder.add_edge("router_agent", "decider")
+    
+    builder.add_node("Calendar", calendar_agent_node)
+    builder.add_node("Icon", icon_agent_node)
+    builder.add_node("Combobox", combobox_agent_node)
+    builder.add_node("Url", url_agent_node)
+    builder.add_node("Button", button_agent_node)
+    builder.add_node("Textbox", textbox_agent_node)
+    builder.add_node("Switch", switch_agent_node)
+    builder.add_node("Checkbox", checkbox_agent_node)
+    # Set the entry point
+    
+    builder.add_conditional_edges(
+        "decider",         # Source node is now 'decider'
+        decide_next_step,  # Function that returns the key of the next node
+        {
+            # Map the return value of decide_next_step to the next node's key
+            "Calendar": "Calendar",
+            "Icon": "Icon",
+            "Combobox": "Combobox",
+            "Url": "Url",
+            "Button": "Button",
+            "Textbox": "Textbox",
+            "Switch": "Switch", 
+            "Checkbox": "Checkbox",
+            "__end__": END  # Special key mapping to the end of the graph
+        }
+    )
+    builder.add_edge("Calendar", "decider")
+    builder.add_edge("Icon", "decider")
+    builder.add_edge("Combobox", "decider")
+    builder.add_edge("Url", "decider")
+    builder.add_edge("Button", "decider")
+    builder.add_edge("Textbox", "decider")
+    builder.add_edge("Switch", "decider")
+    builder.add_edge("Checkbox", "decider")
+
     # Compile the graph
     return builder.compile()
 

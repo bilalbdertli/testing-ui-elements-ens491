@@ -63,7 +63,7 @@ class Switch(BaseModel):
     state: Literal["on", "off"]
 
 class SwitchList(BaseModel):
-    switches: list[Switch] = Field(default_factory=list)
+    switch: list[Switch] = Field(default_factory=list)
 
 class Textbox(BaseModel):
     id: conint(ge=0) # type: ignore
