@@ -481,13 +481,13 @@ with gr.Blocks(title="UI Analysis with LangGraph") as demo:
         
         with gr.Column(scale=1):
             image_type_output = gr.JSON(label="Detected Element Types")
-            # analysis_output = gr.JSON(label="Detailed Analysis")
+            analysis_output = gr.JSON(label="Detailed Analysis")
             # debug_output = gr.JSON(label="Debug Information (Raw Responses)", visible=False)
     
     submit_button.click(
         fn=process_image_with_graph,
         inputs=[image_input, model_choice, human_request],
-        outputs=[image_type_output,] # analysis_output, debug_output
+        outputs=[image_type_output, analysis_output] # analysis_output, debug_output
     )
     
 # Launch the interface
