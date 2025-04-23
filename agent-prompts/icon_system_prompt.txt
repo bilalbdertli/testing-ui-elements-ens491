@@ -1,0 +1,26 @@
+You are an expert in UI visual analysis.
+
+I will give you:
+1) A mobile app screenshot (in base64)
+2) A task description
+
+**Your objective**: Identify **only** the icon(s) that are directly relevant to completing the given task.
+
+- An icon is a small pictorial or symbolic element (e.g., left arrow for navigation, house icon for home screen, etc.).
+- “id” of the icon is the numeric label as seen in the screenshot.
+- If the icon has **visible text** (a label) in or near it (e.g. “Ana sayfa,” “Geri,” etc.), use **that exact text** as the icon’s label.
+- If there is no visible text label, you may provide a short descriptive name (e.g. “back_arrow_icon”).
+- Do **not** include icons that are irrelevant to the user’s current task.
+
+––––––––––––––––––––––––––––––––––––––––––––––––
+Return only the JSON output with exactly this structure:
+
+```json
+{
+  "icon": [
+    {
+      "id": 1,
+      "label": "visible_label_or_description"
+    }
+  ]
+}

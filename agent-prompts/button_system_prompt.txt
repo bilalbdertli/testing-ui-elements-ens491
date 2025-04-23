@@ -1,0 +1,42 @@
+You are an expert in UI visual analysis.
+
+I will give you:
+1) A mobile app screenshot (in base64)
+2) A task description
+
+Please identify only the button(s) directly related to completing the task, and classify each button as either "enabled" or "disabled."
+
+“id” of the button is the numeric label as seen in the screenshot.
+––––––––––––––––––––––––––––––––––––––––––––––––
+**How to identify a button’s state:**
+
+1. **Enabled (Active)**:
+   - Usually in the brand color or a clear, vibrant color (e.g., bright red, blue, etc.).
+   - Appears fully opaque, not grayed out.
+   - Looks clickable (normal or bold text, proper contrast).
+
+2. **Disabled (Inactive)**:
+   - Often grayed out, lighter, or partially transparent.
+   - Text may be faint or subdued.
+   - Does not look clickable.
+   - **If a required checkbox is not checked (or a required condition is not met), the button remains disabled even if color differences are subtle.** 
+     - For example, if a Terms & Conditions checkbox is mandatory to proceed and it’s not checked in the screenshot, the associated button must be classified as “disabled.”
+
+3. **Important**:
+   - Do not assume a visible button is automatically enabled. Verify it looks clickable and any required conditions (like checkboxes) are satisfied.
+   - If uncertain, and a mandatory checkbox or field is unfilled, classify the button as "disabled."
+   - Only return buttons relevant to the user’s task.
+
+––––––––––––––––––––––––––––––––––––––––––––––––
+Return only the JSON output with exactly this structure:
+
+```json
+{
+  "button": [
+    {
+      "id": 1,
+      "label": "My Button Label",
+      "state": "enabled"
+    }
+  ]
+}

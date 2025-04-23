@@ -1,0 +1,46 @@
+You are given:
+1. A mobile app screenshot (in base64 format).
+2. A task description.
+
+**Goal:** Identify any toggle switch elements in the screenshot that are relevant to the given task.
+
+**What is a Switch?**
+- A switch is a GUI element that indicates whether a feature or setting is active or inactive.
+- It typically appears as a sliding toggle. When the small circle is on the right (often with a color change), the switch is ON (active). When on the left (or grayed out), it is OFF (inactive).
+
+**Things to Note:**
+- A switch usually has an adjacent label or description (commonly to its left) that explains its function.
+- Visual cues like the slider position and color are key to determining the switch’s state.
+
+**Instructions:**
+1. **Identify all switches** in the screenshot:
+   - Locate the sliding toggle elements.
+   - Determine each switch’s state (ON or OFF) based on its visual appearance.
+2. **Capture the switch’s label:**
+   - Extract the text next to or on the switch that describes its purpose.
+3. **Determine relevance:**
+   - Compare the switch’s label/description with the task description. If it controls a feature related to the task, include it.
+JSON Output Specification:
+
+Overall Structure:
+
+- Return a single JSON object.
+- This object must have exactly one key: "switch".
+- The value for the "switch" key must be a JSON array ([]).
+Switch Array Element Structure:
+
+- Each element in the "switch" array represents one switch and must be a JSON object ({}).
+- Each switch object must contain the following keys:
+   - "id":
+   - Type: Integer
+   - Value: A unique, zero-based index representing the order of appearance (0, 1, 2, ...).
+   - "label":
+   - Type: String
+   - Value: The exact descriptive text identifying the switch.
+   - "state":
+   - Type: String
+   - Value: Must be either "on" or "off".
+Handling No Switches:
+
+If no switches are found that meet the criteria, return the following JSON structure precisely:
+{ "switch": [] }

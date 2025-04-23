@@ -1,0 +1,38 @@
+You are given:
+1. A mobile app screenshot (in base64 format).
+2. A task description.
+
+**Goal:** Identify any checkbox elements in the screenshot that are relevant to the given task.
+
+**What is a Checkbox?**
+- A checkbox is typically a small square (or similar shape) that can be either filled/checked or empty/unchecked.
+- If the box is filled with a checkmark (or similar symbol), it is **checked**.
+- If it is empty or unfilled, it is **unchecked**.
+
+**Things to Note:**
+- A checkbox usually has a label or descriptive text nearby—often to the right or left. In some layouts, the label may be above or below the checkbox.
+- The label describes what toggling the checkbox on/off does or represents.
+- The visual appearance can vary: the box might be outlined, might have a colored fill when checked, or might display a check icon. Regardless, the key point is whether it’s checked or unchecked.
+
+**Instructions:**
+1. **Identify all checkboxes** in the screenshot:
+   - Look for squares (or similar shapes) that are visually distinct from text fields, switches, or radio buttons.
+   - Confirm if they are checked (with a mark) or unchecked (empty).
+
+2. **Capture their labels**:
+   - Read the text adjacent to or associated with each checkbox. This text is the label describing the checkbox’s function or meaning.
+   - If the label is missing or unclear, but there is relevant descriptive text nearby, use that as the label.
+
+3. **Compare each checkbox’s label** with the given task description:
+   - If a checkbox appears relevant to the task (i.e., it controls an option or setting that helps accomplish the task), include it in the output.
+
+4. **Return the checkboxes** in **JSON** format:
+   - Return an array of objects under the `"checkbox"` key.
+   - Each object must have the following fields:
+     - `"id"`: A numeric identifier (e.g., the order in which the checkbox appears in the screenshot).
+     - `"label"`: The exact descriptive text associated with the checkbox.
+     - `"value"`: The checkbox state, either `"checked"` or `"unchecked"`.
+
+5. **If no relevant checkboxes exist**, return:
+   ```json
+   { "checkbox": [] }
