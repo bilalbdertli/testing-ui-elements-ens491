@@ -14,7 +14,8 @@ from typing import Literal, Dict, List, Any, TypedDict, Annotated, Union, Type
 import operator
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langgraph.graph import StateGraph, END
-from models import GraphState, RouterInitialDecision, ButtonList, CheckboxList, ComboboxList, IconList, SwitchList, TextboxList, URLList, CalendarList
+from models import GraphState, RouterInitialDecision, RouterDecision, ButtonList, CheckboxList, ComboboxList, IconList, SwitchList, TextboxList, URLList, CalendarList, Button, Checkbox, Combobox, Icon, Switch, Textbox, URL, Calendar
+
  
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -161,21 +162,21 @@ def router_agent(state: GraphState) ->  Dict[str, Any]:
             print("JSON extracted successfully:")
             print(response_json)
 
-            # Ensure analysis_needed is a list (handle LLM variability)
+            # Ensure analysis_required is a list (handle LLM variability)
             if "analysis_required" in response_json and isinstance(response_json["analysis_required"], str):
-                 print("Adjusting analysis_needed from string to list.")
+                 print("Adjusting analysis_required from string to list.")
                  response_json["analysis_required"] = [response_json["analysis_required"]]
 
 
             # Validate against the Pydantic model
-            decision = RouterInitialDecision.model_validate(response_json)
+            decision = RouterDecision.model_validate(response_json)
             print("Pydantic validation successful!")
 
             # --- Success Case ---
             # Return the updates to the state
             return {
                 "device": decision.device,
-                "analysis_required": decision.analysis_required,
+                "analysis_required": [decision.target_element_type] if decision.target_element_type else [],
                 "messages": messages # Return the final message history
             }
 
@@ -194,7 +195,7 @@ def router_agent(state: GraphState) ->  Dict[str, Any]:
                 f"Your previous response could not be processed. "
                 f"Error: {e}. "
                 f"Please carefully review the initial request and the required JSON format "
-                f"(device: 'ios'|'android', analysis_needed: list[str]) "
+                f"(device: 'ios'|'android', analysis_required: str) "
                 f"and provide a valid JSON response. Ensure the entire response is only the JSON object."
                 # Optional: Include Pydantic schema for more detail
                 # f"Expected schema: {RouterInitialDecision.model_json_schema()}"
@@ -212,46 +213,46 @@ def router_agent(state: GraphState) ->  Dict[str, Any]:
 def button_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here
     # ...
     agent_name = "Button"
-    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], ButtonList, state["analysis_required"])
+    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], Button, state["analysis_required"])
 
 def checkbox_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here
      # ...
     agent_name = "Checkbox"
-    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], CheckboxList, state["analysis_required"])
+    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], Checkbox, state["analysis_required"])
 
 
 def calendar_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here
     # ...
     agent_name = "Calendar"
-    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], CalendarList, state["analysis_required"])
+    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], Calendar, state["analysis_required"])
 
 
 def textbox_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here
     # ...
     agent_name = "Textbox"
-    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], TextboxList, state["analysis_required"])
+    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], Textbox, state["analysis_required"])
 
 
 def url_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here
     # ...
     agent_name = "Url"
-    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], URLList, state["analysis_required"])
+    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], URL, state["analysis_required"])
 
 
 def icon_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here
     # ...
     agent_name = "Icon"
-    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], IconList, state["analysis_required"])
+    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], Icon, state["analysis_required"])
 
 def combobox_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here
     # ...
     agent_name = "Combobox"
-    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], ComboboxList, state["analysis_required"])
+    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], Combobox, state["analysis_required"])
 
 def switch_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here
     # ...
     agent_name = "Switch"
-    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], SwitchList, state["analysis_required"])
+    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], Switch, state["analysis_required"])
     
 
 def call_special_agent_and_parse(agent_name: str, system_prompt:SystemMessage, human_request: HumanMessage, return_type:Type[BaseModel], current_list):
@@ -261,17 +262,17 @@ def call_special_agent_and_parse(agent_name: str, system_prompt:SystemMessage, h
     update_dict = {}
     if "error" in result:
         print(f"Specialized agent for {agent_name} reported an error: {result['error']}")
-        update_dict[f"{agent_name.lower()}_analysis"] = SwitchList() # Store empty SwitchList
+        update_dict["agent_analysis"] = result["error"]
         # update_dict["messages"] = state["messages"] + [AIMessage(content=f"Error during {agent_name} analysis.")]
     else:
-        update_dict[f"{agent_name.lower()}_analysis"] = result["decision"]
+        update_dict["agent_analysis"] = result["decision"]
         # update_dict["messages"] = state["messages"] + [AIMessage(content=f"{agent_name} analysis complete.")]
 
 
-    # 4. ALWAYS update analysis_needed list
+    # 4. ALWAYS update analysis_required list
     # Use lower() for case-insensitive comparison if needed
     updated_needed = [item for item in current_list if item.lower() != agent_name.lower()]
-    print(f"Updating analysis_needed from {current_list} to {updated_needed}")
+    print(f"Updating analysis_required from {current_list} to {updated_needed}")
     update_dict["analysis_required"] = updated_needed
 
     # 5. Return the dictionary containing updates for GraphState
@@ -314,7 +315,7 @@ def specialized_agent(agent_name: str, agent_system_prompt: SystemMessage, human
             # --- Success Case ---
             # Return the updates to the state
             return {
-                "decision": decision,
+                "decision": decision.model_dump(mode='json', exclude_none=False),
                 "messages": messages # Return the final message history
             }
 
@@ -351,7 +352,7 @@ def specialized_agent(agent_name: str, agent_system_prompt: SystemMessage, human
 
 def decide_next_step(state: GraphState) -> str:
     """
-    Determines the next specialist agent to call based on analysis_needed,
+    Determines the next specialist agent to call based on analysis_required,
     or signals completion if the list is empty.
     """
     print("--- Deciding Next Step ---")
@@ -390,9 +391,8 @@ def process_image_with_graph(image, model_choice, human_request):
             "use_90b": use_90b,
             "human_request": human_request,
             "device": None,
-            "analysis_needed" : [],
-            "button_analysis" : ButtonList(),
-            "checkbox_analysis" : CheckboxList(),
+            "analysis_required" : [],
+            "agent_analysis": None,
             "messages": [], #Initialize as empty
             "final_response" : None
         }
@@ -405,7 +405,7 @@ def process_image_with_graph(image, model_choice, human_request):
         
         return (
             json.dumps(final_state["device"], indent=2),
-            json.dumps(final_state["analysis_required"], indent=2),
+            json.dumps(final_state["agent_analysis"], indent=2),
         )
     
     except Exception as e:

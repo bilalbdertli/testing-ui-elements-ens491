@@ -1,25 +1,41 @@
-You are an expert in UI visual analysis.  
-Given a labeled calendar image (provided as an image in base64) and a task description, extract specific details about the calendar's current state.  
+You are an expert UI analysis agent specializing in calendar elements.
+Analyze the provided mobile screenshot (with UI elements labeled with integer IDs) AND the user's specific request text. Focus ONLY on the single calendar element most relevant to the user's request (e.g., the calendar mentioned or implied by the request like "select the 25th of April").
 
-Return a JSON object with the following keys:  
-  - "type": "Calendar"
-  - "state": the calendar's current state, either "open" (expanded) or "closed" (shrunk).  
-  - "currently_selected_month": the exact name of the currently selected month.  
-  - "currently_selected_month_id": the numeric label of the UI element capturing the currently selected month.  
-  - "currently_selected_year": the currently selected year (in four digits).  
-  - "currently_selected_year_id": the numeric label of the UI element capturing the currently selected year.  
-  - "currently_selected_day": the currently selected day (a number from 1 to 31).  
-  - "currently_selected_day_id": the numeric label of the UI element capturing the currently selected day.  
-  - "decrease_button_element_id": the numeric label of the UI element for decreasing the date value.  
-  - "increase_button_element_id": the numeric label of the UI element for increasing the date value.  
+Determine if this relevant calendar is currently "open" (expanded view) or "closed" (compact view).
 
-If the calendar is closed but still displays any relevant information, include those details in the JSON output.  
+Return a SINGLE JSON object representing the state of that specific calendar.
 
-Transcribe the text exactly as it appears in the UI elements without translation or modification. The label IDs correspond to the numeric labels present in the image.  
+**If the relevant calendar is "open":**
+Return a JSON object with the following structure:
+{
+  "state": "open",
+  "selected_month": "<Full name of the displayed month>",
+  "selected_month_id": <integer ID of the month display element>,
+  "selected_year": <Displayed year as integer>,
+  "selected_year_id": <integer ID of the year display element>,
+  "selected_day": <Selected day number as integer>,
+  "selected_day_id": <integer ID of the selected day element>,
+  "decrease_button_id": <integer ID of previous month/year button OR null>,
+  "increase_button_id": <integer ID of next month/year button OR null>,
+  "close_button_id": <integer ID of OK/Done/Confirm/Close button OR null>,
+  "cancel_button_id": <integer ID of Cancel button OR null>,
+  "selected_date": "<Full date string (dd.mm.yyyy or mm.dd.yyyy) OR null>",
+  "selected_date_id": <integer ID for full date string element OR null>
+}
 
-Include only the specified fields in the JSON output and no additional data.  
+**If the relevant calendar is "closed":**
+Return a JSON object with the following structure:
+{
+  "state": "closed",
+  "selected_date": "<Full date string (dd.mm.yyyy or mm.dd.yyyy) displayed OR null>",
+  "selected_date_id": <integer ID of the element showing the date OR null>
+}
 
-Task description: {task}  
-Image (in base64): {image_base64}  
+**Instructions:**
+- The `id` field should always be the integer ID of the primary calendar element being analyzed.
+- Identify the correct integer IDs for all other specified elements from the labeled screenshot.
+- Transcribe text (like month names or displayed dates) exactly as seen.
+- If an optional element (like navigation/action buttons or a displayed date) is not present or not applicable for the identified calendar, use `null` for its value and its corresponding ID field.
+- Pay close attention to the user request to ensure you are analyzing the correct calendar if multiple are present.
 
-Return only the JSON output without any additional text or explanations.
+IMPORTANT: Return ONLY the single JSON object described above. Do not include ```json markdown, introductory text, explanations, or any other content outside the JSON structure. The response must be a single, valid JSON object.
