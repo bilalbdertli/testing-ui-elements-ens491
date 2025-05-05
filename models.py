@@ -179,12 +179,18 @@ class IconList(BaseModel):
     icons: list[Icon] = Field(default_factory=list)
 
 class Switch(BaseModel):
-    id: conint(ge=0) # type: ignore
-    label: str
-    state: Literal["on", "off"]
+    """Represents any on/off switch (e.g., Wi‑Fi, Dark Mode) with a unified schema."""
+
+    switch_state: Literal["on", "off"] = Field(..., description="Current visual state of the switch.")
+    switch_id: conint(ge=0) = Field(..., description="Label ID of the switch control.")  # type: ignore
+    switch_name: Optional[str] = Field(default=None, description="Visible label of the switch, or null if none.")
+    enabled: bool = Field(..., description="True if the switch is interactive/unlocked, False if it is greyed‑out or locked.")
+    return_button_id: Optional[conint(ge=0)] = Field(default=None, description="Back/previous‑page button ID, if visible.")  # type: ignore
+
 
 class SwitchList(BaseModel):
-    switch: list[Switch] = Field(default_factory=list)
+    switches: List[Switch] = Field(default_factory=list, description="Detected switch toggles.")
+
 
 class Textbox(BaseModel):
     id: conint(ge=0) # type: ignore
