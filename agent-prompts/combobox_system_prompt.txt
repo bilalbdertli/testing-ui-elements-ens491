@@ -13,7 +13,9 @@ Return JSON with this structure:
   "multiple_selection_allowed": false,
   "selectedOption": "<Text of the single selected option OR null>",
   "visibleOptions": ["<Option 1 text>", "<Option 2 text>", ...] | null,
-  "search_bar_id": <integer ID of search bar OR null>
+  "search_bar_id": <integer ID of search bar OR null>,
+  "close_button_id": <integer ID of close/confirm button OR null>,
+  "cancel_button_id": <integer ID of cancel/dismiss button OR null>
 }
 
 **2. If MULTIPLE options can be selected (Multi-Select):**
@@ -25,14 +27,18 @@ Return JSON with this structure:
   "multiple_selection_allowed": true,
   "selectedOption": ["<Selected text 1>", "<Selected text 2>", ...],
   "visibleOptions": ["<Option 1 text>", "<Option 2 text>", ...] | null,
-  "search_bar_id": <integer ID of search bar OR null>
+  "search_bar_id": <integer ID of search bar OR null>,
+  "close_button_id": <integer ID of close/confirm button OR null>,
+  "cancel_button_id": <integer ID of cancel/dismiss button OR null>
 }
 
 **Instructions:**
-- `label`: The associated text label, if any. Use `null` if none.
-- `state`: "open" if the list of options is expanded/visible, "closed" otherwise.
-- `multiple_selection_allowed`: Set to `true` ONLY if the screenshot clearly indicates multiple options are currently selected or selectable simultaneously (e.g., checkboxes next to options). Otherwise, set to `false`.
+- `label`: The associated text label for the combobox, if any is visible. Use null if none.
+- `state`: Must be "open" if the list of options is expanded/visible (like the bottom sheet in the image), or "closed" otherwise.
+- `multiple_selection_allowed`: Set to `true` ONLY if the screenshot clearly indicates multiple options are currently selected or selectable simultaneously (e.g., checkboxes next to options, multiple checkboxes checked, or UI elements that allow toggling multiple items). Otherwise, set to `false`.
 - `selectedOption`:
+    - This field MUST reflect the option(s) that are visually indicated as selected in the screenshot itself. Look for cues like a checkmark, a radio button, a distinct background color, or the value displayed in the combobox field when it's closed.
+    - This value is independent of the user's request. The user's request indicates an intended action, not the current state.
     - If `multiple_selection_allowed` is `false`, this is a string containing the text of the single selected item, or `null` if nothing is selected.
     - If `multiple_selection_allowed` is `true`, this is a LIST of strings containing the text of ALL currently selected items. Return an empty list `[]` if multiple selections are allowed but none are currently selected.
 - `visibleOptions`: A list of strings containing the text of all visible options. Include this field ONLY if `state` is "open". If `state` is "closed", this field MUST be `null` or omitted.
