@@ -1,35 +1,82 @@
 You are given:
-1. A mobile app screenshot (in base64 format).
-2. A task description.
 
-**Goal:** Identify any textbox elements in the screenshot that are relevant to the given task.
+A mobile app screenshot (in base64 format).
 
-**What is a Textbox?**
-- A textbox is a GUI element designed for text input, typically displayed as a rectangular field.
-- It may have an associated label (positioned above, below, or adjacent to the textbox) or include placeholder text indicating its purpose.
-- The textbox can show pre-entered text (its current value) or be empty, indicating no input.
+A task description.
 
-**Things to Note:**
-- The label or placeholder text provides critical context (e.g., "Name", "Email", "Search") that clarifies the textbox’s function.
-- Relevance is determined by matching the textbox’s label or placeholder with the provided task description.
+What is a Textbox?
+A textbox is a graphical user interface (GUI) element used for user text input. It typically appears as a rectangular field, possibly outlined or underlined, and may have:
 
-**Instructions:**
-1. **Identify all textbox elements** in the screenshot:
-   - Locate rectangular fields intended for text entry.
-   - Look for any labels or placeholder text that indicate what information is expected.
-2. **Capture details for each textbox:**
-   - Extract the label or descriptive text associated with the textbox.
-   - Extract the placeholder text (if available).
-   - Record the current content of the textbox, or mark it as `"empty"` if no text is present.
-3. **Determine relevance:**
-   - Compare the textbox’s label/placeholder with the task description. Include only the textboxes that are pertinent to the task.
-4. **Return the results in JSON format:**
-   - Provide an array under the `"textbox"` key.
-   - Each object in the array must include:
-     - `"id"`: A numeric identifier (based on the order of appearance).
-     - `"label"`: The exact descriptive text associated with the textbox.
-     - `"placeholder"`: The placeholder text within the textbox, if any.
-     - `"value"`: The current text content of the textbox, or `"empty"` if it is blank.
-5. If no relevant textboxes are found, return:
-   ```json
-   { "textbox": [] }
+A visible label (e.g. “Username”, “Email”) positioned above, below, or beside it.
+
+A placeholder text inside the textbox (e.g. “Enter your name”).
+
+A current value, which is either pre-filled content or empty.
+
+A caret (blinking cursor) indicating it is editable.
+
+Variants including password masking, multi-line input, disabled/read-only states, and validation constraints.
+
+Goal:
+Identify textbox elements relevant to the given task, including special textbox types and edge cases.
+
+Textbox Types to Identify:
+StandardTextBox: Regular editable textbox.
+
+PasswordTextBox: Obscured input fields (e.g. password).
+
+MultiLineTextBox: Textboxes that support multiple lines.
+
+DisabledTextBox: Visibly greyed out and uneditable.
+
+ReadOnlyTextBox: Displays content, focusable but not editable.
+
+ValidatedTextBox: Fields with visible validation (e.g., required, maxlength, format, pattern).
+
+Instructions:
+Identify each textbox and determine its type from the list above.
+
+For each textbox, extract:
+
+"id": Numeric identifier (based on order of appearance).
+
+"type": One of the types above.
+
+"label": Descriptive text associated with the textbox.
+
+"placeholder": Text shown inside the box before input (if any).
+
+"value": Current content or "empty".
+
+"validation": Constraints such as required, maxlength, pattern, if visible.
+
+"editable": true if user can type; false if read-only or disabled.
+
+"secure": true if it is a password or obscured field.
+
+Relevance:
+Only include textboxes that help fulfill the user’s task.
+
+Return Format:
+json
+{
+  "textbox": [
+    {
+      "id": 1,
+      "type": "StandardTextBox",
+      "label": "Username",
+      "placeholder": "Enter your username",
+      "value": "empty",
+      "validation": {
+        "required": true,
+        "maxlength": 20
+      },
+      "editable": true,
+      "secure": false
+    }
+  ]
+}
+If no relevant textboxes are found, return:
+
+json
+{ "textbox": [] }

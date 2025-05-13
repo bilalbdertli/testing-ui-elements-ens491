@@ -14,10 +14,15 @@ from typing import Literal, Dict, List, Any, TypedDict, Annotated, Union, Type
 import operator
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langgraph.graph import StateGraph, END
-from models import GraphState, RouterInitialDecision, RouterDecision, ButtonList, CheckboxList, ComboboxList, IconList, SwitchList, TextboxList, URLList, CalendarList, Button, Checkbox, Combobox, Icon, Switch, Textbox, URL, Calendar
-
- 
 from langchain_core.prompts import ChatPromptTemplate
+from models import (
+    GraphState, RouterInitialDecision, RouterDecision,
+    ButtonList, CheckboxList, ComboboxList, IconList,
+    SwitchList, TextboxList, URLList, CalendarList,
+    Button, Checkbox, Combobox, Icon, Switch, URL, Calendar,
+    BaseTextbox
+)
+
 
 # Load environment variables from .env file
 load_dotenv()
@@ -230,7 +235,7 @@ def calendar_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here
 def textbox_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here
     # ...
     agent_name = "Textbox"
-    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], Textbox, state["analysis_required"])
+    return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], TextboxList, state["analysis_required"])
 
 
 def url_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here

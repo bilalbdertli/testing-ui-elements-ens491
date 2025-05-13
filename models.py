@@ -186,14 +186,19 @@ class Switch(BaseModel):
 class SwitchList(BaseModel):
     switch: list[Switch] = Field(default_factory=list)
 
-class Textbox(BaseModel):
-    id: conint(ge=0) # type: ignore
-    label: str
-    placeholder: Optional[str] = None
-    value: Optional[str] = None
+class BaseTextbox(BaseModel):
+    id: int
+    label: Optional[str]
+    placeholder: Optional[str]
+    value: str
+    input_type: Literal["text", "password", "email", "search", "phone", "number", "textarea"]
+    state: Literal["enabled", "disabled", "readonly"]
+    required: Optional[bool] = False
+    maxlength: Optional[int] = None
+    format_hint: Optional[str] = None
 
 class TextboxList(BaseModel):
-    textboxes: list[Textbox] = Field(default_factory=list)
+    textbox: List[BaseTextbox]
 
 class URL(BaseModel):
     id: conint(ge=0) # type: ignore
