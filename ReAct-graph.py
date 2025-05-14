@@ -10,7 +10,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 from enum import Enum
-from typing import Literal, Dict, List, Any, TypedDict, Annotated, Union, Type
+from typing import Literal, Dict, List, Any, TypedDict, Annotated, Union, Type, Optional, Tuple
 import operator
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langgraph.graph import StateGraph, END
@@ -177,7 +177,8 @@ def router_agent(state: GraphState) ->  Dict[str, Any]:
             return {
                 "device": decision.device,
                 "analysis_required": [decision.target_element_type] if decision.target_element_type else [],
-                "messages": messages # Return the final message history
+                "messages": messages, # Return the final message history
+                "router_target_element_type": decision.target_element_type
             }
 
         except (ValueError, json.JSONDecodeError, Exception) as e: # Catch JSON errors and Pydantic validation errors
@@ -255,17 +256,21 @@ def switch_agent_node(state: GraphState) -> Dict[str, Any]: # <-- Change here
     return call_special_agent_and_parse(agent_name, SystemMessage(content=SYSTEM_PROMPTS[agent_name]), state["messages"][1], Switch, state["analysis_required"])
     
 
-def call_special_agent_and_parse(agent_name: str, system_prompt:SystemMessage, human_request: HumanMessage, return_type:Type[BaseModel], current_list):
+def call_special_agent_and_parse(agent_name: str, system_prompt:SystemMessage, human_request: HumanMessage, return_type:Type[BaseModel], current_list) -> Dict[str, Any]:
     result = specialized_agent(agent_name,  system_prompt, human_request, return_type)
 
         # 3. Process the result and prepare state updates
     update_dict = {}
     if "error" in result:
         print(f"Specialized agent for {agent_name} reported an error: {result['error']}")
-        update_dict["agent_analysis"] = result["error"]
+        error_object = {
+            "error": f"Error in {agent_name} agent",
+            "details": result["error"],
+        }
+        update_dict["agent_analysis"] = json.dumps(error_object)
         # update_dict["messages"] = state["messages"] + [AIMessage(content=f"Error during {agent_name} analysis.")]
     else:
-        update_dict["agent_analysis"] = result["decision"]
+        update_dict["agent_analysis"] = json.dumps(result["decision"])
         # update_dict["messages"] = state["messages"] + [AIMessage(content=f"{agent_name} analysis complete.")]
 
 
@@ -368,12 +373,245 @@ def decide_next_step(state: GraphState) -> str:
     print(f"Decision: Routing to '{next_agent_type}' agent.")
     return next_agent_type # e.g., "button", "checkbox"
 
+def compare_lists_flexible(llm_list: List, golden_list: List, field_name: str) -> bool:
+    if len(llm_list) != len(golden_list):
+        return False
+    can_sort_by_id = False
+    if llm_list and golden_list:
+        first_llm = llm_list[0]
+        first_golden = golden_list[0]
+        if isinstance(first_llm, dict) and isinstance(first_golden, dict) and 'id' in first_llm and 'id' in first_golden:
+            can_sort_by_id = True
+        elif hasattr(first_llm, 'id') and hasattr(first_golden, 'id'):
+             can_sort_by_id = True
+    if can_sort_by_id:
+        try:
+            llm_sorted = sorted(llm_list, key=lambda x: x['id'] if isinstance(x, dict) else x.id)
+            golden_sorted = sorted(golden_list, key=lambda x: x['id'] if isinstance(x, dict) else x.id)
+            return llm_sorted == golden_sorted
+        except (TypeError, KeyError, AttributeError):
+             pass
+    return llm_list == golden_list
+
+
+def compare_json_analysis_dict_vs_golden_str(
+    llm_fields_dict: Optional[Dict[str, Any]], # LLM's analysis as a Python dictionary
+    golden_analysis_json_str: str,
+    expected_agent_type_for_golden_validation: Optional[str] = None # Optional: for validating golden JSON
+) -> Tuple[float, Dict[str, str]]:
+    """
+    Compares LLM's analysis dictionary with a golden JSON string, field by field,
+    based on the keys present in the golden JSON.
+    """
+    details = {}
+    correct_field_count = 0
+    total_field_count = 0
+
+    if not llm_fields_dict: # If LLM produced no parsable analysis
+        llm_fields_dict = {} # Treat as empty for comparison
+
+    if not golden_analysis_json_str.strip():
+        details["overall"] = "Golden JSON is empty."
+        is_llm_empty = not bool(llm_fields_dict) # Check if the dict is empty
+        if is_llm_empty:
+            details["overall"] = "Match: Both Golden JSON and LLM output are effectively empty."
+            return 1.0, details
+        else:
+            details["overall"] = "Mismatch: Golden JSON empty, LLM output not."
+            return 0.0, details
+
+    try:
+        golden_data_dict = json.loads(golden_analysis_json_str)
+    except json.JSONDecodeError as e:
+        details["error"] = f"Invalid Golden JSON: {e}"
+        return 0.0, details
+
+    if not isinstance(golden_data_dict, dict):
+        details["error"] = "Golden JSON is not a valid JSON object (dictionary)."
+        return 0.0, details
+    
+    if not golden_data_dict: # Handles case where golden JSON is "{}"
+        details["overall"] = "Golden JSON is an empty object."
+        is_llm_empty = not bool(llm_fields_dict)
+        if is_llm_empty:
+            details["overall"] = "Match: Both Golden JSON and LLM output are effectively empty."
+            return 1.0, details
+        else:
+            details["overall"] = "Mismatch: Golden JSON empty, but LLM output has data."
+            return 0.0, details
+        
+    for golden_key, golden_value in golden_data_dict.items():
+        total_field_count += 1
+        field_comparison_key = f"Field '{golden_key}'"
+
+        if golden_key not in llm_fields_dict:
+            details[field_comparison_key] = "Mismatch (Key missing in LLM output)"
+        else:
+            llm_value = llm_fields_dict[golden_key]
+            if isinstance(golden_value, list) and isinstance(llm_value, list):
+                if compare_lists_flexible(llm_value, golden_value, golden_key):
+                    details[field_comparison_key] = "Match"
+                    correct_field_count += 1
+                else:
+                    details[field_comparison_key] = f"Mismatch (LLM: {llm_value}, Golden: {golden_value})"
+            elif llm_value == golden_value: # Direct comparison for non-list types
+                details[field_comparison_key] = "Match"
+                correct_field_count += 1
+            else:
+                details[field_comparison_key] = f"Mismatch (LLM: {llm_value}, Golden: {golden_value})"
+
+    if total_field_count == 0:
+        accuracy = 1.0
+        details["overall"] = "No fields in Golden JSON to compare."
+    else:
+        accuracy = correct_field_count / total_field_count
+
+    return accuracy, details
+
+
+
+def perform_comparisons(
+    llm_device: Optional[str],
+    llm_router_decision: Optional[str], # Router's decision (e.g., "Button", "None")
+    llm_analysis_result_dict: Optional[Dict[str, Any]], # Parsed JSON from agent_analysis
+    expected_os: str,
+    expected_agent_type: str, # String like "Button", "Checkbox", or "None"
+    golden_analysis_json_str: str
+) -> Tuple[str, str, str]:
+    """
+    Performs the OS, Agent Type, and JSON Analysis comparisons.
+    llm_analysis_result_dict is the parsed dictionary from state.agent_analysis.
+    """
+    # --- 1. OS Comparison ---
+    os_result_str = ""
+    if not llm_device:
+        os_result_str = "Mismatch: LLM did not determine OS."
+    elif llm_device.lower() == expected_os.lower():
+        os_result_str = f"Match: Both are '{expected_os}'."
+    else:
+        os_result_str = f"Mismatch: LLM='{llm_device}', Expected='{expected_os}'."
+
+    # --- 2. Agent Type Comparison ---
+    agent_type_result_str = ""
+    # Handle the "None" expectation
+    expected_is_none = expected_agent_type == "None"
+    llm_decision_is_none = llm_router_decision is None or llm_router_decision.lower() == "none"
+
+    if expected_is_none and llm_decision_is_none:
+         agent_type_result_str = "Match: Both correctly identified no specific agent needed."
+    elif expected_is_none and not llm_decision_is_none:
+         agent_type_result_str = f"Mismatch: Expected 'None', but LLM triggered '{llm_router_decision}'."
+    elif not expected_is_none and llm_decision_is_none:
+         agent_type_result_str = f"Mismatch: Expected '{expected_agent_type}', but LLM triggered 'None'."
+    # Both expect a specific type, compare them (case-insensitive)
+    elif expected_agent_type.lower() == llm_router_decision.lower():
+        agent_type_result_str = f"Match: Both identified '{expected_agent_type}'."
+    else:
+        agent_type_result_str = f"Mismatch: Expected='{expected_agent_type}', LLM Triggered='{llm_router_decision}'."
+    
+    # --- 3. JSON Analysis Comparison ---
+    analysis_result_str = "N/A"
+
+    agent_types_match_and_specific_expected = (
+        not expected_is_none and
+        not llm_decision_is_none and
+        expected_agent_type.lower() == llm_router_decision.lower()
+    )
+
+    if agent_types_match_and_specific_expected:
+        if not llm_analysis_result_dict: # Check if the dict from agent_analysis is None or empty
+             analysis_result_str = f"Mismatch: Agent type '{expected_agent_type}' matched, but no analysis data found in LLM state (agent_analysis was empty or unparsable)."
+        else:
+            # Now call compare_json_analysis with the llm_analysis_result_dict
+            accuracy, details = compare_json_analysis_dict_vs_golden_str(
+                llm_analysis_result_dict, # Pass the dictionary
+                golden_analysis_json_str,
+                expected_agent_type # Pass for context, e.g., validating golden JSON
+            )
+            if "error" in details:
+                analysis_result_str = details["error"]
+            else:
+                analysis_result_str = f"Accuracy: {accuracy:.2f}\nDetails:\n" + "\n".join(
+                    f"- {k}: {v}" for k, v in details.items()
+                )
+    # ... (rest of the N/A conditions for analysis_result_str remain the same) ...
+    elif expected_is_none and llm_decision_is_none:
+        analysis_result_str = "N/A (No specific agent analysis expected or triggered, as per match)"
+    elif expected_is_none and not llm_decision_is_none:
+        analysis_result_str = f"N/A (Expected no agent, but LLM triggered {llm_router_decision})"
+    elif not expected_is_none and llm_decision_is_none:
+        analysis_result_str = f"N/A (Expected {expected_agent_type}, but LLM triggered no agent)"
+    else: # Agent types mismatched
+        analysis_result_str = "N/A (Agent types mismatched, so analysis content not compared)"
+
+    return os_result_str, agent_type_result_str, analysis_result_str
+
+
+
+
+def run_and_compare(
+    image_input, human_request, # Agent inputs
+    expected_os, expected_agent_type, golden_analysis_json_str # Golden inputs
+):
+    print("--- Received Inputs ---")
+    print(f"Expected OS: {expected_os}")
+    print(f"Expected Agent Type: {expected_agent_type}")
+    print(f"Golden JSON String:\n{golden_analysis_json_str}")
+    if image_input is None:
+        return "Error: No image provided.", "", "", ""
+    try:
+        final_state = process_image_with_graph(image_input, human_request)
+        print(f"Type of final_state is {type(final_state)}")
+        print(final_state)
+        llm_device = final_state.get("device")
+        llm_router_decision = final_state.get("router_target_element_type") # This is a string or None
+
+        # Get the raw JSON string from the state
+        llm_agent_analysis_str = final_state.get("agent_analysis")
+        llm_analysis_result_dict = None # This will be the parsed dict from agent_analysis
+
+        llm_output_display = "No specific agent analysis found in state."
+        if llm_agent_analysis_str:
+            try:
+                llm_analysis_result_dict = json.loads(llm_agent_analysis_str)
+                # Pretty print for display
+                llm_output_display = json.dumps(llm_analysis_result_dict, indent=2)
+            except json.JSONDecodeError:
+                llm_output_display = f"Error: Could not parse agent_analysis JSON: {llm_agent_analysis_str}"
+                # llm_analysis_result_dict remains None
+    except Exception as e:
+        print(f"Error during graph execution: {e}")
+        return f"Error during graph execution: {e}", "", "", ""
+    
+    try:
+        print(f"Type of analysis result is {type(llm_analysis_result_dict)}")
+        print(f"Type of the golden json string is {type(golden_analysis_json_str)}")
+        os_comparison_result, agent_type_comparison_result, analysis_comparison_result = perform_comparisons(
+            llm_device,
+            llm_router_decision, # Pass the router's decision string
+            llm_analysis_result_dict, # Pass the parsed dictionary (or None)
+            expected_os,
+            expected_agent_type,
+            golden_analysis_json_str
+        )
+    except Exception as e:
+         print(f"Error during comparison: {e}")
+         os_comparison_result = "Comparison Error"
+         agent_type_comparison_result = "Comparison Error"
+         analysis_comparison_result = f"Error during comparison: {e}"
+
+    return (
+        llm_output_display,
+        os_comparison_result,
+        agent_type_comparison_result,
+        analysis_comparison_result
+    )
 
 # Function to process the image through our agent graph
-def process_image_with_graph(image, model_choice, human_request):
+def process_image_with_graph(image, human_request) -> dict: # model_choice is removed
     try:
         # Determine which model to use
-        use_90b = model_choice == "90B Model"
+        use_90b = True #set to True since for now we use only 1 model
         
         # Extract the mime type, and base64 representation, of the PIL image.
         buffered = io.BytesIO()
@@ -392,6 +630,7 @@ def process_image_with_graph(image, model_choice, human_request):
             "human_request": human_request,
             "device": None,
             "analysis_required" : [],
+            "router_target_element_type": None,
             "agent_analysis": None,
             "messages": [], #Initialize as empty
             "final_response" : None
@@ -401,12 +640,7 @@ def process_image_with_graph(image, model_choice, human_request):
         workflow = build_graph()
         print("Graph has been compiled.")
         final_state = workflow.invoke(initial_state)
-        
-        
-        return (
-            json.dumps(final_state["device"], indent=2),
-            json.dumps(final_state["agent_analysis"], indent=2),
-        )
+        return final_state
     
     except Exception as e:
         return f"Error: {str(e)}", "Error processing image", "{}"
@@ -461,33 +695,56 @@ def build_graph():
 
 
 # Create Gradio interface
-with gr.Blocks(title="UI Analysis with LangGraph") as demo:
-    gr.Markdown("# UI Analysis with LangGraph")
-    gr.Markdown("Upload a screenshot of a mobile app UI for intelligent analysis. The system can detect multiple UI elements in a single screenshot.")
-    
+with gr.Blocks() as demo:
+    gr.Markdown("# Agentic UI Analysis & Evaluation")
+
     with gr.Row():
         with gr.Column(scale=1):
-            image_input = gr.Image(type="pil", label="Upload UI Screenshot")
-            human_request = gr.Textbox(
-                label="Enter your request",
-                placeholder="e.g., Find all the buttons in the image.",
+            gr.Markdown("## Agent Inputs")
+            input_image = gr.Image(type="pil", label="Upload Screenshot")
+            input_request = gr.Textbox(lines=2, label="Human Request", placeholder="e.g., Click the save button")
+
+            gr.Markdown("## Golden Inputs (for Evaluation)")
+            input_expected_os = gr.Radio(["ios", "android"], label="Expected OS", value="android")
+            # Use Dropdown for predefined types
+            input_expected_agent_type = gr.Dropdown(
+                choices=["Button", "Checkbox", "Calendar", "Icon", "Combobox", "Url", "Textbox", "Switch", "None"], # Add "None"
+                label="Expected Agent Type",
+                value="None" # Default to None
             )
-            model_choice = gr.Radio(
-                ["90B Model", "11B Model"], 
-                label="Select Model", 
-                value="90B Model"
+            input_golden_json = gr.Code(
+                language="json",
+                lines=10,
+                label="Expected JSON Analysis Output (for the specific agent type)",
             )
-            submit_button = gr.Button("Analyze UI", variant="stop")
-        
+
+            run_button = gr.Button("Run Analysis & Compare")
+
         with gr.Column(scale=1):
-            image_type_output = gr.JSON(label="Detected Element Types")
-            analysis_output = gr.JSON(label="Detailed Analysis")
-            # debug_output = gr.JSON(label="Debug Information (Raw Responses)", visible=False)
-    
-    submit_button.click(
-        fn=process_image_with_graph,
-        inputs=[image_input, model_choice, human_request],
-        outputs=[image_type_output, analysis_output] # analysis_output, debug_output
+            gr.Markdown("## Agent Output")
+            output_llm_json = gr.Code(language="json", label="LLM Analysis JSON", interactive=False)
+
+            gr.Markdown("## Evaluation Results")
+            output_os_comparison = gr.Textbox(label="OS Classification Accuracy", interactive=False)
+            output_agent_type_comparison = gr.Textbox(label="Agent Type Trigger Accuracy", interactive=False)
+            output_analysis_accuracy = gr.Textbox(label="JSON Analysis Accuracy", lines=5, interactive=False)
+            
+    # Connect button click to the processing function
+    run_button.click(
+        fn=run_and_compare,
+        inputs=[
+            input_image,
+            input_request,
+            input_expected_os,
+            input_expected_agent_type,
+            input_golden_json
+        ],
+        outputs=[
+            output_llm_json,
+            output_os_comparison,
+            output_agent_type_comparison,
+            output_analysis_accuracy
+        ]
     )
     
 # Launch the interface

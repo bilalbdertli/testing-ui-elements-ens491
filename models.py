@@ -508,6 +508,7 @@ class GraphState(TypedDict):
     human_request: str # String that will be written.
     device: Optional[Literal["ios", "android"]]
     analysis_required: List[str]
+    router_target_element_type: Optional[str] # Literal["Button", "Checkbox" , "Calendar",  "Icon" , "Combobox" , "Url" , "Textbox",  "Switch", None]
     agent_analysis: Optional[str]
     messages: List[BaseMessage]
     final_response: Optional[Dict[str, Any]]
