@@ -4,6 +4,7 @@ import json
 import base64
 import re
 import io
+import uuid
 from azure.core.credentials import AzureKeyCredential
 from langchain_azure_ai.chat_models import AzureAIChatCompletionsModel
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
@@ -15,7 +16,7 @@ import operator
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langgraph.graph import StateGraph, END
 from models import GraphState, RouterInitialDecision, RouterDecision, ButtonList, CheckboxList, ComboboxList, IconList, SwitchList, TextboxList, URLList, CalendarList, Button, Checkbox, Combobox, Icon, Switch, Textbox, URL, Calendar
-
+from PIL import Image
  
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -694,59 +695,282 @@ def build_graph():
     return builder.compile()
 
 
+def flag_example(
+    image, request, exp_os, exp_agent, golden, llm, os_cmp, agent_cmp,
+    analysis, reason
+):
+    os.makedirs("flagged_examples", exist_ok=True)
+    uid = uuid.uuid4().hex
+    # serialize image as base64
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    img_b64 = base64.b64encode(buf.getvalue()).decode()
+    data = {
+        "image": img_b64,
+        "request": request,
+        "expected_os": exp_os,
+        "expected_agent_type": exp_agent,
+        "golden_json": golden,
+        "llm_json": llm,
+        "os_comparison": os_cmp,
+        "agent_type_comparison": agent_cmp,
+        "analysis_accuracy": analysis,
+        "flag_reason": reason,
+    }
+    with open(f"flagged_examples/{uid}.json", "w") as f:
+        json.dump(data, f, indent=2)
+    return "✅ Example flagged!"
+
+def list_flagged_files():
+    """Return a sorted list of all .json filenames in flagged_examples/"""
+    folder = "flagged_examples"
+    if not os.path.isdir(folder):
+        return []
+    return sorted(f for f in os.listdir(folder) if f.endswith(".json"))
+
+def load_flagged_json(filename):
+    """Given a filename, load and pretty-print its JSON contents."""
+    path = os.path.join("flagged_examples", filename)
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+        return json.dumps(data, indent=2)
+    except Exception as e:
+        return f"Error loading {filename}: {e}"
+
+def load_flagged_examples_for_gallery():
+    """
+    Scans the `flagged_examples/` folder for .json files,
+    decodes each image, thumbnails it, and returns a list of
+    (PIL.Image, caption) tuples for display in a Gallery.
+    """
+    folder = "flagged_examples"
+    if not os.path.isdir(folder):
+        return []
+    items = []
+    for fname in sorted(os.listdir(folder)):
+        if not fname.endswith(".json"):
+            continue
+        path = os.path.join(folder, fname)
+        with open(path, "r") as f:
+            data = json.load(f)
+        # Decode base64 → PIL Image
+        img_bytes = base64.b64decode(data["image"])
+        img = Image.open(io.BytesIO(img_bytes))
+        img.thumbnail((100, 100))
+        # Build a small markdown caption
+        lines = []
+        for k, v in data.items():
+            if k == "image":
+                continue
+            # pretty‐print nested JSON if needed
+            val = json.dumps(v, indent=2) if isinstance(v, dict) else v
+            lines.append(f"**{k.replace('_',' ').title()}:** {val}")
+        caption = "\n\n".join(lines)
+        items.append((img, caption))
+    return items
+
+def load_flagged_examples_html():
+    """
+    Scans `flagged_examples/` for .json files, decodes each image,
+    and builds a chunk of HTML where each example is rendered as:
+      [thumbnail]   [key: value<br>key: value<br>…]
+    """
+    folder = "flagged_examples"
+    if not os.path.isdir(folder):
+        return "<p><em>No flagged examples found.</em></p>"
+
+    snippets = []
+    for fname in sorted(os.listdir(folder)):
+        if not fname.endswith(".json"):
+            continue
+        path = os.path.join(folder, fname)
+        data = json.load(open(path))
+
+        # We have the raw base64 from your saved JSON:
+        img_b64 = data["image"]
+
+        # Optionally re-decode + resize for even better performance:
+        raw = base64.b64decode(img_b64)
+        img = Image.open(io.BytesIO(raw))
+        img.thumbnail((400, 800))  # keep aspect ratio, max width=400px
+
+        # Re-encode to base64 so we can embed the resized thumbnail:
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        thumb_b64 = base64.b64encode(buf.getvalue()).decode()
+
+        # Build metadata HTML
+        meta_lines = []
+        for k, v in data.items():
+            if k == "image":
+                continue
+            pretty = json.dumps(v, indent=2) if isinstance(v, dict) else v
+            meta_lines.append(f"<p><strong>{k.replace('_',' ').title()}:</strong> {pretty}</p>")
+
+        snippet = f"""
+        <div style="
+          display: flex;
+          align-items: flex-start;
+          margin-bottom: 1.5rem;
+          border-bottom: 1px solid #444;
+          padding-bottom: 1rem;
+        ">
+          <img
+            src="data:image/png;base64,{thumb_b64}"
+            style="max-width: 300px; width: 100%; height: auto; margin-right: 1rem; border:1px solid #666;"
+          />
+          <div style="color: #eee; font-size: 0.9rem; line-height:1.4;">
+            <p><em>Filename: {fname}</em></p>
+            {"".join(meta_lines)}
+          </div>
+        </div>
+        """
+        snippets.append(snippet)
+
+    # Wrap everything in a scrollable container
+    html = f"""
+    <div style="
+      max-height: 80vh;
+      overflow-y: auto;
+      padding-right: 1rem;
+    ">
+      {''.join(snippets)}
+    </div>
+    """
+    return html
+
 # Create Gradio interface
 with gr.Blocks() as demo:
-    gr.Markdown("# Agentic UI Analysis & Evaluation")
+    with gr.Tabs():
+        with gr.TabItem("Agentic UI Analysis"):
+            gr.Markdown("# Agentic UI Analysis & Evaluation")
 
-    with gr.Row():
-        with gr.Column(scale=1):
-            gr.Markdown("## Agent Inputs")
-            input_image = gr.Image(type="pil", label="Upload Screenshot")
-            input_request = gr.Textbox(lines=2, label="Human Request", placeholder="e.g., Click the save button")
+            with gr.Row():
+                with gr.Column(scale=1):
+                    gr.Markdown("## Agent Inputs")
+                    input_image = gr.Image(
+                        type="pil", label="Upload Screenshot"
+                    )
+                    input_request = gr.Textbox(
+                        lines=2,
+                        label="Human Request",
+                        placeholder="e.g., Click the save button",
+                    )
 
-            gr.Markdown("## Golden Inputs (for Evaluation)")
-            input_expected_os = gr.Radio(["ios", "android"], label="Expected OS", value="android")
-            # Use Dropdown for predefined types
-            input_expected_agent_type = gr.Dropdown(
-                choices=["Button", "Checkbox", "Calendar", "Icon", "Combobox", "Url", "Textbox", "Switch", "None"], # Add "None"
-                label="Expected Agent Type",
-                value="None" # Default to None
+                    gr.Markdown("## Golden Inputs (for Evaluation)")
+                    input_expected_os = gr.Radio(
+                        ["ios", "android"],
+                        label="Expected OS",
+                        value="android",
+                    )
+                    input_expected_agent_type = gr.Dropdown(
+                        choices=[
+                            "Button",
+                            "Checkbox",
+                            "Calendar",
+                            "Icon",
+                            "Combobox",
+                            "Url",
+                            "Textbox",
+                            "Switch",
+                            "None",
+                        ],
+                        label="Expected Agent Type",
+                        value="None",
+                    )
+                    input_golden_json = gr.Code(
+                        language="json",
+                        lines=10,
+                        label="Expected JSON Analysis Output "
+                              "(for the specific agent type)",
+                    )
+
+                    run_button = gr.Button("Run Analysis & Compare")
+
+                with gr.Column(scale=1):
+                    gr.Markdown("## Agent Output")
+                    output_llm_json = gr.Code(
+                        language="json",
+                        label="LLM Analysis JSON",
+                        interactive=False,
+                    )
+
+                    gr.Markdown("## Evaluation Results")
+                    output_os_comparison = gr.Textbox(
+                        label="OS Classification Accuracy",
+                        interactive=False,
+                    )
+                    output_agent_type_comparison = gr.Textbox(
+                        label="Agent Type Trigger Accuracy",
+                        interactive=False,
+                    )
+                    output_analysis_accuracy = gr.Textbox(
+                        lines=5,
+                        label="JSON Analysis Accuracy",
+                        interactive=False,
+                    )
+
+            run_button.click(
+                fn=run_and_compare,
+                inputs=[
+                    input_image,
+                    input_request,
+                    input_expected_os,
+                    input_expected_agent_type,
+                    input_golden_json,
+                ],
+                outputs=[
+                    output_llm_json,
+                    output_os_comparison,
+                    output_agent_type_comparison,
+                    output_analysis_accuracy,
+                ],
             )
-            input_golden_json = gr.Code(
-                language="json",
-                lines=10,
-                label="Expected JSON Analysis Output (for the specific agent type)",
+
+            flag_reason = gr.Dropdown(
+                choices=[
+                    "Wrong OS Classification",
+                    "Wrong Agent Type Classification",
+                    "Incorrect JSON Analysis",
+                    "Other",
+                ],
+                label="Flag Reason",
+            )
+            flag_button = gr.Button("Flag This Run")
+
+            flag_status = gr.Textbox(
+                label="Flag Status", interactive=False
             )
 
-            run_button = gr.Button("Run Analysis & Compare")
+            flag_button.click(
+                fn=flag_example,
+                inputs=[
+                    input_image,
+                    input_request,
+                    input_expected_os,
+                    input_expected_agent_type,
+                    input_golden_json,
+                    output_llm_json,
+                    output_os_comparison,
+                    output_agent_type_comparison,
+                    output_analysis_accuracy,
+                    flag_reason,
+                ],
+                outputs=flag_status,
+            )
 
-        with gr.Column(scale=1):
-            gr.Markdown("## Agent Output")
-            output_llm_json = gr.Code(language="json", label="LLM Analysis JSON", interactive=False)
+        with gr.TabItem("Flagged Examples"):
+            gr.Markdown("## Browse Flagged Examples")
+            refresh_btn = gr.Button("Refresh List")
+            html_view = gr.HTML(value=load_flagged_examples_html())
 
-            gr.Markdown("## Evaluation Results")
-            output_os_comparison = gr.Textbox(label="OS Classification Accuracy", interactive=False)
-            output_agent_type_comparison = gr.Textbox(label="Agent Type Trigger Accuracy", interactive=False)
-            output_analysis_accuracy = gr.Textbox(label="JSON Analysis Accuracy", lines=5, interactive=False)
-            
-    # Connect button click to the processing function
-    run_button.click(
-        fn=run_and_compare,
-        inputs=[
-            input_image,
-            input_request,
-            input_expected_os,
-            input_expected_agent_type,
-            input_golden_json
-        ],
-        outputs=[
-            output_llm_json,
-            output_os_comparison,
-            output_agent_type_comparison,
-            output_analysis_accuracy
-        ]
-    )
-    
-# Launch the interface
+            # Re-scan & re-render on demand
+            refresh_btn.click(
+                fn=load_flagged_examples_html,
+                inputs=None,
+                outputs=html_view
+            )
+
 if __name__ == "__main__":
     demo.launch()
