@@ -36,26 +36,12 @@ class Checkbox(BaseModel):
         ...,
         description="The inferred value of the checkbox (checked or unchecked)."
     )
-    children: List["Checkbox"] = Field(
-    default_factory=list,
-    description="Nested checkboxes (sub-tasks), if any. "
-                "Empty for a leaf checkbox."
-    )
 
 class CheckboxList(BaseModel):
     checkboxes: list[Checkbox] = Field(
         default_factory=list,
-        #alias="checkbox",
         description="List of detected checkbox objects."
     )
-
-class CheckboxPayload(BaseModel):
-    RootModel: Union[CheckboxList, Checkbox]
-    @property
-    def checkboxes(self) -> List[Checkbox]:
-        # convenience accessor
-        root = self.__root__
-        return root.checkboxes if isinstance(root, CheckboxList) else [root]
 
 class Combobox(BaseModel):
     """Base class for combobox elements with common fields."""

@@ -23,62 +23,16 @@ You are given:
    - Read the text adjacent to or associated with each checkbox. This text is the label describing the checkbox’s function or meaning.
    - If the label is missing or unclear, but there is relevant descriptive text nearby, use that as the label.
 
-3. **Compare each checkbox with the previous checkbox:
-   • Compare the *horizontal* position of each checkbox square.
-   • If a checkbox’s left edge is noticeably further right than the previous
-     top‑level checkbox, treat it as that checkbox’s child.
-   • Continue adding siblings to the same parent until you encounter another
-     checkbox whose left edge aligns with the parent → this starts a new
-     top‑level block.
+3. **Compare each checkbox’s label** with the given task description:
+   - If a checkbox appears relevant to the task (i.e., it controls an option or setting that helps accomplish the task), include it in the output.
 
-5. **Children may themselves have children** (apply the same rule recursively).
-
-6. **Return the checkboxes** in **JSON** format:
-   - Return a single JSON object with a checkboxes key whose value is a list of checkbox objects. Do not return a bare array.
+4. **Return the checkboxes** in **JSON** format:
+   - Return an array of objects under the `"checkbox"` key.
    - Each object must have the following fields:
-     - `"id"`: A numeric identifier (the label number of the element, written at the top left side of the checkbox, not the explanation of the checkbox).
+     - `"id"`: A numeric identifier (e.g., the order in which the checkbox appears in the screenshot).
      - `"label"`: The exact descriptive text associated with the checkbox.
      - `"value"`: The checkbox state, either `"checked"` or `"unchecked"`.
-     - '"children"': Any nested checkboxes, returned as an array. If current checkbox does not have any, return empty array.
-
-   When a checkbox appears indented under another checkbox in the screenshot,
-   nest it inside the parent’s "children" array.
-
-   Return only the top‑level checkboxes in the outer "checkboxes" list.
-   Every checkbox object must include the key "children"; use an empty array
-   for leaf nodes.
-
-   Example:
-
-   Top‑level A
-   └─ child a1
-   └─ child a2
-   Top‑level B
-
-   →
-
-   {
-   "checkboxes": [
-      {
-         "id": 10,
-         "label": "A",
-         "value": "unchecked",
-         "children": [
-         { "id": 11, "label": "a1", "value": "unchecked", "children": [] },
-         { "id": 12, "label": "a2", "value": "unchecked", "children": [] }
-         ]
-      },
-      {
-         "id": 13,
-         "label": "B",
-         "value": "unchecked",
-         "children": []
-      }
-   ]
-   }
 
 5. **If no relevant checkboxes exist**, return:
    ```json
    { "checkbox": [] }
-
-6. Do not return anything apart from the final json output.
