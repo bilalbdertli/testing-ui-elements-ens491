@@ -1,37 +1,37 @@
 You are given:
-1. A mobile app screenshot (in base64 format).
-2. A task description.
+1. A mobile-app screenshot (base64-encoded).
+2. A **task description** (what the user wants to do).
 
-**Goal:** Identify any checkbox elements in the screenshot that are relevant to the given task.
+────────────────────────  GOAL  ────────────────────────
+Return **only** the checkbox (or nested checkboxes) that helps
+accomplish the task.  
+If none are relevant, return `{ "checkboxes": [] }`.
 
-**What is a Checkbox?**
-- A checkbox is typically a small square (or similar shape) that can be either filled/checked or empty/unchecked.
-- If the box is filled with a checkmark (or similar symbol), it is **checked**.
-- If it is empty or unfilled, it is **unchecked**.
+────────────────────────  DEFINITIONS  ─────────────────
+A *checkbox* is a small square (or similar) that can be:
+• **checked**   – box shows a ✓, tick, or filled mark  
+• **unchecked** – empty / unfilled
 
-**Things to Note:**
-- A checkbox usually has a label or descriptive text nearby—often to the right or left. In some layouts, the label may be above or below the checkbox.
-- The label describes what toggling the checkbox on/off does or represents.
-- The visual appearance can vary: the box might be outlined, might have a colored fill when checked, or might display a check icon. Regardless, the key point is whether it’s checked or unchecked.
+──────────────────────  INSTRUCTIONS  ──────────────────
+1. **Locate every checkbox** in the screenshot.
+2. **Determine its label** – the exact text near the box.
+3. **Decide relevance**:  
+   • A checkbox (or its child) is **relevant** if its label
+     directly matches, enables, disables, or completes the task
+     described.  
+   • Ignore checkboxes unrelated to the task.
 
-**Instructions:**
-1. **Identify all checkboxes** in the screenshot:
-   - Look for squares (or similar shapes) that are visually distinct from text fields, switches, or radio buttons.
-   - Confirm if they are checked (with a mark) or unchecked (empty).
+4. **Build parent/child relationships by visual indentation**  
+   • Compare the left edge of each checkbox square.  
+   • A box indented >≈ one icon-width (≈1 checkbox) to the right of
+     the previous top-level box is that box’s **child**.  
+   • Repeat recursively.
 
-2. **Capture their labels**:
-   - Read the text adjacent to or associated with each checkbox. This text is the label describing the checkbox’s function or meaning.
-   - If the label is missing or unclear, but there is relevant descriptive text nearby, use that as the label.
-
-3. **Compare each checkbox with the previous checkbox:
-   • Compare the *horizontal* position of each checkbox square.
-   • If a checkbox’s left edge is noticeably further right than the previous
-     top‑level checkbox, treat it as that checkbox’s child.
-   • Continue adding siblings to the same parent until you encounter another
-     checkbox whose left edge aligns with the parent → this starts a new
-     top‑level block.
-
-5. **Children may themselves have children** (apply the same rule recursively).
+5. **Keep only relevant branches**  
+   • If a parent checkbox is relevant, include it and *all* of its
+     children (even if some children seem unrelated).  
+   • If a parent is **not** relevant but one of its children **is**,
+     include the parent anyway to preserve hierarchy.
 
 6. **Return the checkboxes** in **JSON** format:
    - Return a single JSON object with a checkboxes key whose value is a list of checkbox objects. Do not return a bare array.
@@ -41,44 +41,16 @@ You are given:
      - `"value"`: The checkbox state, either `"checked"` or `"unchecked"`.
      - '"children"': Any nested checkboxes, returned as an array. If current checkbox does not have any, return empty array.
 
-   When a checkbox appears indented under another checkbox in the screenshot,
-   nest it inside the parent’s "children" array.
+7. **Output JSON (no markdown, no extra keys)**
 
-   Return only the top‑level checkboxes in the outer "checkboxes" list.
-   Every checkbox object must include the key "children"; use an empty array
-   for leaf nodes.
-
-   Example:
-
-   Top‑level A
-   └─ child a1
-   └─ child a2
-   Top‑level B
-
-   →
-
-   {
-   "checkboxes": [
-      {
-         "id": 10,
-         "label": "A",
-         "value": "unchecked",
-         "children": [
-         { "id": 11, "label": "a1", "value": "unchecked", "children": [] },
-         { "id": 12, "label": "a2", "value": "unchecked", "children": [] }
-         ]
-      },
-      {
-         "id": 13,
-         "label": "B",
-         "value": "unchecked",
-         "children": []
-      }
-   ]
-   }
-
-5. **If no relevant checkboxes exist**, return:
-   ```json
-   { "checkbox": [] }
-
-6. Do not return anything apart from the final json output.
+```json
+{
+  "checkboxes": [
+    {
+      "id": <int>,
+      "label": "<exact text>",
+      "value": "checked" | "unchecked",
+      "children": [ … ],
+    }
+  ]
+}
