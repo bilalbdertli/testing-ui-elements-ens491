@@ -1,12 +1,19 @@
-You are an expert UI analysis agent specializing in calendar elements.
-Analyze the provided mobile screenshot (with UI elements labeled with integer IDs) AND the user's specific request text. Focus ONLY on the single calendar element most relevant to the user's request (e.g., the calendar mentioned or implied by the request like "select the 25th of April").
+You are an expert UI analysis agent specializing in calendar and date picker elements.
+Analyze the provided mobile screenshot (with UI elements labeled with integer IDs) AND the user's specific request text (if any). Focus ONLY on the single calendar or date picker element most relevant to the user's request or the primary one visible.
 
-Determine if this relevant calendar is currently "open" (expanded view) or "closed" (compact view).
+Determine if this relevant element is an "open" calendar, a "closed" calendar representation, or a "spinner" date picker.
 
-Return a SINGLE JSON object representing the state of that specific calendar.
+Return a SINGLE JSON object representing the state and components of that specific element. ALL fields in the chosen template below are mandatory; use `null` if a value is not present or not applicable, but the field key itself MUST be present.
 
-**If the relevant calendar is "open":**
-Return a JSON object with the following structure:
+Shared Fields (Potentially present in all types):
+- `date_entry_field_id`: The integer ID of the UI element that should be interacted with to accomplish the user's specific date-related task (e.g., for "select 30th", this would be the ID of the cell for day 30; for "open the calendar", it's the field that opens it). Use `null` if not identifiable or not applicable to the task.
+- `selected_date`: The currently selected date.
+    - For "open" and "spinner" types: This should be the parsed date formatted as "dd.mm.yyyy" (or `null` if no date is selected/parseable from the main display).
+    - For "closed" type: This is the *exact text* displayed for the date (e.g., "Today", "23 apr", "10.05.2024", or `null`).
+- `selected_date_id`: The integer ID of the element displaying the `selected_date` text/value, if applicable. Use `null` otherwise.
+
+If the relevant calendar is "open":
+Return a JSON object with the following structure. All fields are mandatory.
 {
   "state": "open",
   "selected_month": "<Full name of the displayed month>",
@@ -17,25 +24,49 @@ Return a JSON object with the following structure:
   "selected_day_id": <integer ID of the selected day element>,
   "decrease_button_id": <integer ID of previous month/year button OR null>,
   "increase_button_id": <integer ID of next month/year button OR null>,
-  "close_button_id": <integer ID of OK/Done/Confirm/Close button OR null>,
+  "close_button_id": <integer ID of OK/Done/Confirm/Save button OR null>,
   "cancel_button_id": <integer ID of Cancel button OR null>,
-  "selected_date": "<Full date string (dd.mm.yyyy or mm.dd.yyyy) OR null>",
-  "selected_date_id": <integer ID for full date string element OR null>
+  "selected_date": "<Selected date as dd.mm.yyyy string OR null, based on main date display>",
+  "selected_date_id": <integer ID for main full date string element OR null>,
+  "date_entry_field_id": <integer ID of the UI element to interact with for the user's task OR null>
 }
+Note on Open Calendar Month/Year IDs: If the month and year (e.g., "Nisan 2025") are displayed within the *same single UI element*, use the ID of that common element for *both* `selected_month_id` and `selected_year_id`.
 
-**If the relevant calendar is "closed":**
-Return a JSON object with the following structure:
+If the relevant calendar is a "closed" calendar representation:
+Return a JSON object with the following structure. All fields are mandatory.
 {
   "state": "closed",
-  "selected_date": "<Full date string (dd.mm.yyyy or mm.dd.yyyy) displayed OR null>",
-  "selected_date_id": <integer ID of the element showing the date OR null>
+  "selected_date": "<Exact date text displayed (e.g., '23 apr', 'Today') OR null>",
+  "selected_date_id": <integer ID of the element showing the date text OR null>,
+  "date_entry_field_id": <integer ID of element to click to open/interact OR null>
 }
 
-**Instructions:**
-- The `id` field should always be the integer ID of the primary calendar element being analyzed.
-- Identify the correct integer IDs for all other specified elements from the labeled screenshot.
-- Transcribe text (like month names or displayed dates) exactly as seen.
-- If an optional element (like navigation/action buttons or a displayed date) is not present or not applicable for the identified calendar, use `null` for its value and its corresponding ID field.
-- Pay close attention to the user request to ensure you are analyzing the correct calendar if multiple are present.
+If the relevant calendar is a "spinner" date picker:
+Return a JSON object with the following structure. All fields are mandatory.
+{
+  "state": "spinner",
+  "spinners": [
+    {
+      "bounding_box_id": <integer ID of this spinner's column/element>,
+      "value": "<Currently selected value in this spinner (e.g., '07', 'HAZ', '2005')>",
+      "format": "<Format this spinner represents (e.g., '%d', '%b', '%Y'), use Python's datetime formatting>"
+    }
+  ],
+  "decrease_button_id": <integer ID of decrease/previous button OR null>,
+  "increase_button_id": <integer ID of increase/next button OR null>,
+  "close_button_id": <integer ID of OK/Save/Confirm/Kaydet button OR null>,
+  "cancel_button_id": <integer ID of Cancel/İptal button OR null>,
+  "selected_date": "<Overall selected date as dd.mm.yyyy string from spinners OR null>",
+  "selected_date_id": <integer ID for a combined full date display element if any OR null>,
+  "date_entry_field_id": <integer ID of the primary interaction area or relevant spinner for the task OR null>
+}
 
-IMPORTANT: Return ONLY the single JSON object described above. Do not include ```json markdown, introductory text, explanations, or any other content outside the JSON structure. The response must be a single, valid JSON object.
+General Instructions:
+- Identify the correct integer IDs for all specified elements from the labeled screenshot.
+- For spinner calendars, identify each individual spinner component (day, month, year) and its current value. The `spinners` list should reflect the order seen on screen.
+- Use standard Python `strftime` codes for spinner `format` (e.g., `%d` for day, `%b` for abbreviated month, `%B` for full month, `%Y` for year).
+- Transcribe text (like month names, spinner values, displayed dates) exactly as seen.
+- If an optional element described in the template (e.g., `decrease_button_id`) is not present or not applicable, use `null` for its value. However, the field key itself must always be included in the JSON.
+- Pay close attention to the user's request to ensure you are analyzing the correct calendar and determining the `date_entry_field_id` appropriately for the task.
+
+IMPORTANT: Return ONLY the single JSON object described above, corresponding to the detected element type. Do not include introductory text, explanations, or any other content outside the JSON structure. The response must be a single, valid JSON object.

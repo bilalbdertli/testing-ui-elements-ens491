@@ -75,8 +75,9 @@ class Combobox(BaseModel):
         default=None,
         description="A list of the text of currently visible options. Should only be present if state is 'open'."
     )
-    search_bar_id: Optional[conint(ge=0)] = Field( # type: ignore
+    search_bar_id: Optional[int] = Field( 
         default=None,
+        ge=0,
         description="The label ID of the search bar within the combobox, if present."
     )
     
@@ -130,11 +131,21 @@ class SingleSelectCombobox(Combobox):
         default=None,
         description="A list of the text of currently visible options. Should only be present if state is 'open'."
     )
-    search_bar_id: Optional[conint(ge=0)] = Field( # type: ignore # New optional field
+    search_bar_id: Optional[int] = Field( 
         default=None,
+        ge=0,
         description="The label ID of the search bar within the combobox, if present."
     )
-
+    close_button_id: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="The label ID of the button used to close the calendar (e.g., 'OK', 'Done', 'X'), if present."
+    )
+    cancel_button_id: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="The label ID of the button used to cancel the selection and close the calendar, if present."
+    )
     @model_validator(mode='after') # Run after standard validation
     def check_visible_options_state(self) -> 'SingleSelectCombobox':
         if self.state == "closed" and self.visibleOptions is not None:
@@ -168,9 +179,20 @@ class MultiSelectCombobox(BaseModel):
         default=None,
         description="A list of the text of currently visible options. Should only be present if state is 'open'."
     )
-    search_bar_id: Optional[conint(ge=0)] = Field( # type: ignore # New optional field
+    search_bar_id: Optional[int] = Field( # type: ignore # New optional field
         default=None,
+        ge=0,
         description="The label ID of the search bar within the combobox, if present."
+    )
+    close_button_id: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="The label ID of the button used to close the calendar (e.g., 'OK', 'Done', 'X'), if present."
+    )
+    cancel_button_id: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="The label ID of the button used to cancel the selection and close the calendar, if present."
     )
 
     @model_validator(mode='after')
@@ -217,6 +239,53 @@ class URL(BaseModel):
 class URLList(BaseModel):
     urls: list[URL] = Field(default_factory=list)
 
+
+class Calendar(BaseModel):
+    """Base calendar class with common fields and discriminator logic."""
+    state: str = Field(..., description="Indicates if the calendar is open or closed")
+    selected_date: Optional[date] = Field(
+        default=None,
+        description="The selected date (as a date object or string depending on calendar type)."
+    )
+    selected_date_id: Optional[int] = Field( 
+        default=None,
+        ge=0,
+        description="The label ID of the UI element displaying the full selected date, if applicable."
+    )
+    date_entry_field_id: Optional[int] = Field( 
+        default=None,
+        ge=0,
+        description=(
+            "The label ID of the UI element which should be interacted with to open "
+            "the calendar or accomplish date-related tasks. May be the same as selected_date_id "
+            "in cases where clicking the displayed date opens the calendar."
+        ),
+    )
+    model_config = {
+        "json_encoders": {
+            date: lambda d: d.strftime("%d.%m.%Y") if d else None
+        }
+    }
+
+    # Static method to validate from dict and determine the type
+    @staticmethod
+    def model_validate(data: dict) -> Union['OpenCalendar', 'ClosedCalendar', 'SpinnerCalendar']:
+        if not isinstance(data, dict):
+            raise ValueError("Data must be a dictionary")
+            
+        if "state" not in data:
+            raise ValueError("Data must contain 'state' field")
+            
+        if data["state"] == "open":
+            return OpenCalendar.model_validate(data)
+        elif data["state"] == "closed":
+            return ClosedCalendar.model_validate(data)
+        elif data["state"] == "spinner":
+            return SpinnerCalendar.model_validate(data)
+        else:
+            raise ValueError(f"Invalid state value: {data['state']}")
+
+
 class ClosedCalendar(BaseModel):
     """Represents a closed calendar element, potentially showing a selected date."""
     state: Literal["closed"] = Field(
@@ -229,11 +298,21 @@ class ClosedCalendar(BaseModel):
             "including abbreviations like '23 apr' or custom formats."
         ),
     )
-    selected_date_id: Optional[conint(ge=0)] = Field( #type: ignore
+    selected_date_id: Optional[int] = Field(
         default=None,
+        ge=0,
         description=(
             "The label ID of the UI element displaying the full selected date "
             "when closed, if applicable."
+        ),
+    )
+    date_entry_field_id: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description=(
+            "The label ID of the UI element which should be interacted with to open "
+            "the calendar or accomplish date-related tasks. May be the same as selected_date_id "
+            "in cases where clicking the displayed date opens the calendar."
         ),
     )
 
@@ -248,49 +327,70 @@ class OpenCalendar(BaseModel):
         ...,
         description="The full name of the currently displayed/selected month (e.g., 'April', 'May')."
     )
-    selected_month_id: conint(ge=0) = Field( # type: ignore
+    selected_month_id: int = Field( 
         ...,
+        ge=0,
         description="The label ID of the UI element showing the selected month name."
     )
-    selected_year: conint(ge=1000, le=2100) = Field( # type: ignore
+    selected_year: int = Field( 
         ...,
+        ge=1000,
+        le=3000,    
         description="The currently displayed/selected year (e.g., 2025)."
     )
-    selected_year_id: conint(ge=0) = Field( # type: ignore
+    selected_year_id: int = Field( 
         ...,
+        ge=0,
         description="The label ID of the UI element showing the selected year."
     )
-    selected_day: conint(ge=1, le=31) = Field( # type: ignore
+    selected_day: int = Field( 
         ...,
+        ge=1,
+        le=31,  
         description="The currently selected day number within the month."
     )
-    selected_day_id: conint(ge=0) = Field( # type: ignore
+    selected_day_id: int = Field( 
         ...,
+        ge=0,
         description="The label ID of the UI element representing the selected day."
     )
-    decrease_button_id: Optional[conint(ge=0)] = Field( # type: ignore
+    decrease_button_id: Optional[int] = Field( 
         default=None,
+        ge=0,
         description="The label ID of the button used to navigate to the previous month/year, if present."
     )
-    increase_button_id: Optional[conint(ge=0)] = Field( # type: ignore
+    increase_button_id: Optional[int] = Field( 
         default=None,
+        ge=0,
         description="The label ID of the button used to navigate to the next month/year, if present."
     )
-    close_button_id: Optional[conint(ge=0)] = Field( # type: ignore
+    close_button_id: Optional[int] = Field(
         default=None,
+        ge=0,
         description="The label ID of the button used to close the calendar (e.g., 'OK', 'Done', 'X'), if present."
     )
-    cancel_button_id: Optional[conint(ge=0)] = Field( # type: ignore
+    cancel_button_id: Optional[int] = Field(
         default=None,
+        ge=0,
         description="The label ID of the button used to cancel the selection and close the calendar, if present."
     )
-    selected_date: Optional[date] = Field( # type: ignore
+    selected_date: Optional[date] = Field( 
         default=None,
         description="The full selected date (e.g., dd.mm.yyyy or mm.dd.yyyy) if represented as a single element, typically relevant when closed."
     )
-    selected_date_id: Optional[conint(ge=0)] = Field( # type: ignore
+    selected_date_id: Optional[int] = Field( 
         default=None,
+        ge=0,
         description="The label ID of the UI element displaying the full selected date, if applicable as a single element."
+    )
+    date_entry_field_id: Optional[int] = Field( 
+        default=None,
+        ge=0,
+        description=(
+            "The label ID of the UI element which should be interacted with to open "
+            "the calendar or accomplish date-related tasks. May be the same as selected_date_id "
+            "in cases where clicking the displayed date opens the calendar."
+        ),
     )
 
     @field_validator("selected_date", mode='before')
@@ -319,37 +419,53 @@ class OpenCalendar(BaseModel):
         }
     }
 
-class Calendar(BaseModel):
-    """Base calendar class with common fields and discriminator logic."""
-    state: str = Field(..., description="Indicates if the calendar is open or closed")
-    selected_date: Optional[Any] = Field(
-        default=None,
-        description="The selected date (as a date object or string depending on calendar type)."
+class SpinnerItem(BaseModel):
+    """Represents a single spinner component in a spinner date picker."""
+    bounding_box_id: int = Field(
+        ...,
+        ge=0,
+        description="The label ID of the bounding box for this specific spinner."
     )
-    selected_date_id: Optional[conint(ge=0)] = Field( # type: ignore
-        default=None,
-        description="The label ID of the UI element displaying the full selected date, if applicable."
+    value: str = Field(
+        ...,
+        description="The currently selected value in this spinner (e.g., '07', 'HAZ', '2005')."
     )
-    model_config = {
-        "json_encoders": {
-            date: lambda d: d.strftime("%d.%m.%Y") if d else None
-        }
-    }
-    # Static method to validate from dict and determine the type
-    @staticmethod
-    def model_validate(data: dict) -> Union['OpenCalendar', 'ClosedCalendar']:
-        if not isinstance(data, dict):
-            raise ValueError("Data must be a dictionary")
-            
-        if "state" not in data:
-            raise ValueError("Data must contain 'state' field")
-            
-        if data["state"] == "open":
-            return OpenCalendar.model_validate(data)
-        elif data["state"] == "closed":
-            return ClosedCalendar.model_validate(data)
-        else:
-            raise ValueError(f"Invalid state value: {data['state']}")
+    format: str = Field(
+        ...,
+        description="The format this spinner represents (e.g., '%d', '%b', '%Y') using Python's datetime format codes."
+    )
+
+class SpinnerCalendar(BaseModel):
+    """Represents a spinner-style date picker with multiple rotating selectors."""
+    state: Literal["spinner"] = Field(
+        ...,
+        description="Indicates the calendar is a spinner-type date picker."
+    )
+    spinners: List[SpinnerItem] = Field(
+        ...,
+        description="List of spinner components, each with its own bounding box, value, and format."
+    )
+    decrease_button_id: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="The label ID of any button used to decrease values in spinners, if present."
+    )
+    increase_button_id: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="The label ID of any button used to increase values in spinners, if present."
+    )
+    close_button_id: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="The label ID of the button used to close and confirm the selection (e.g., 'OK', 'Save'), if present."
+    )
+    cancel_button_id: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="The label ID of the button used to cancel the selection (e.g., 'Cancel', 'İptal'), if present."
+    )
+
 
 class CalendarList(BaseModel):
     calendars: list[Calendar] = Field(default_factory=list)
@@ -406,6 +522,7 @@ class GraphState(TypedDict):
     human_request: str # String that will be written.
     device: Optional[Literal["ios", "android"]]
     analysis_required: List[str]
+    router_target_element_type: Optional[str] # Literal["Button", "Checkbox" , "Calendar",  "Icon" , "Combobox" , "Url" , "Textbox",  "Switch", None]
     agent_analysis: Optional[str]
     messages: List[BaseMessage]
     final_response: Optional[Dict[str, Any]]
