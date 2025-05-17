@@ -268,10 +268,10 @@ def call_special_agent_and_parse(agent_name: str, system_prompt:SystemMessage, h
             "error": f"Error in {agent_name} agent",
             "details": result["error"],
         }
-        update_dict["agent_analysis"] = json.dumps(error_object)
+        update_dict["agent_analysis"] = json.dumps(error_object, ensure_ascii=False)
         # update_dict["messages"] = state["messages"] + [AIMessage(content=f"Error during {agent_name} analysis.")]
     else:
-        update_dict["agent_analysis"] = json.dumps(result["decision"])
+        update_dict["agent_analysis"] = json.dumps(result["decision"], ensure_ascii=False)
         # update_dict["messages"] = state["messages"] + [AIMessage(content=f"{agent_name} analysis complete.")]
 
 
@@ -562,8 +562,8 @@ def run_and_compare(
         return "Error: No image provided.", "", "", ""
     try:
         final_state = process_image_with_graph(image_input, human_request)
-        print(f"Type of final_state is {type(final_state)}")
-        print(final_state)
+        # print(f"Type of final_state is {type(final_state)}")
+        # print(final_state)
         llm_device = final_state.get("device")
         llm_router_decision = final_state.get("router_target_element_type") # This is a string or None
 
@@ -576,7 +576,7 @@ def run_and_compare(
             try:
                 llm_analysis_result_dict = json.loads(llm_agent_analysis_str)
                 # Pretty print for display
-                llm_output_display = json.dumps(llm_analysis_result_dict, indent=2)
+                llm_output_display = json.dumps(llm_analysis_result_dict, indent=2, ensure_ascii=False)
             except json.JSONDecodeError:
                 llm_output_display = f"Error: Could not parse agent_analysis JSON: {llm_agent_analysis_str}"
                 # llm_analysis_result_dict remains None

@@ -4,6 +4,22 @@ Based on BOTH the screenshot and the user's specific request (e.g., "click save"
 1. The single UI element type that is MOST relevant and necessary to fulfill the user's stated request within the context of the visible screen elements.
 2. The operating system of the device (iOS or Android).
 
+To determine the Operating System (iOS or Android), meticulously examine the following visual cues in the screenshot:
+
+-   System Navigation Elements (Highest Priority):
+    -   Bottom of Screen:
+        -   iOS: Look for a thin, elongated horizontal line (the Home Indicator) present on iPhones without a physical home button.
+        -   Android: Look for a classic three-button software navigation bar (typically Back, Home, Recents/Overview icons) OR a shorter, often pill-shaped gesture navigation bar.
+    -   Status Bar (Top of Screen):
+        -   iOS: Time is typically on the left. Wi-Fi, cellular signal, and battery icons are on the right, with specific Apple styling. Generally, no persistent third-party app notification icons are on the left side of the status bar (system icons like location or alarm may appear).
+        -   Android: Time is typically on the left. Third-party app notification icons (e.g., from messaging apps, downloads, system updates) are often visible on the left side. Wi-Fi, cellular, battery, and other system icons (e.g., alarm, VoLTE, NFC) are on the right, with styles distinct from iOS.
+-   Secondary Indicators (Use for confirmation or if primary cues are ambiguous):
+    -   Overall UI Design and Native Controls:
+        -   iOS: Look for characteristic iOS UI patterns like centered titles in navigation bars, back buttons often styled as `< PreviousScreenTitle`, modal sheets sliding from the bottom with rounded corners, and specific styles for switches, alerts, and pickers. The presence of "Safari" breadcrumbs (e.g., `< Safari`) is a strong iOS indicator.
+        -   Android: Look for Material Design influences (though customizable), hamburger menus (three horizontal lines) for navigation drawers, and distinct styles for native controls.
+    -   System Fonts: While harder to judge without direct comparison, iOS primarily uses the San Francisco font family, while Android typically uses Roboto.
+
+Prioritize the System Navigation Elements and Status Bar features for OS determination as they are less likely to be altered by app-specific theming.
 The possible UI element types you can identify are: "Button", "Checkbox", "Calendar", "Icon", "Combobox", "Url", "Textbox", "Switch".
 
 CRITICAL:
